@@ -117,6 +117,28 @@ type EmbeddedOpen3DStatus = {
   progress_path: string;
 };
 
+type DomPipelineStatus = {
+  job_id: string;
+  state: string;
+  message: string;
+  stage_name?: string | null;
+  stage_description?: string | null;
+  stage_status?: string | null;
+  stage_index?: number | null;
+  stage_count?: number | null;
+  percent?: number | null;
+  out_dir: string;
+  outputs?: Record<string, unknown>;
+  summary_path?: string | null;
+  error?: string | null;
+  pid?: number | null;
+  return_code?: number | null;
+  running: boolean;
+  log_path: string;
+  progress_path: string;
+  latest_event?: Record<string, unknown> | null;
+};
+
 type Bounds2d = {
   x_min: number;
   x_max: number;
@@ -183,7 +205,17 @@ function App() {
   const [backend, setBackend] = useState<BackendConfig | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [inputPath, setInputPath] = useState("");
+  const [domPath, setDomPath] = useState("");
+  const [modelPath, setModelPath] = useState("");
+  const [dsmPath, setDsmPath] = useState("");
+  const [lasDir, setLasDir] = useState("");
   const [outputDir, setOutputDir] = useState(defaultOutput);
+  const [pipelineDevice, setPipelineDevice] = useState("cuda");
+  const [pipelineThreshold, setPipelineThreshold] = useState("0.50");
+  const [pipelineMaxTiles, setPipelineMaxTiles] = useState("0");
+  const [pipelineForce, setPipelineForce] = useState(false);
+  const [pipelineJobId, setPipelineJobId] = useState<string | null>(null);
+  const [pipelineStatus, setPipelineStatus] = useState<DomPipelineStatus | null>(null);
   const [configText, setConfigText] = useState("{}");
   const [pointInfo, setPointInfo] = useState<PointCloudInfo | null>(null);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
@@ -217,6 +249,15 @@ function App() {
     () => inputPath.trim().length > 0 && outputDir.trim().length > 0 && !busy,
     [busy, inputPath, outputDir]
   );
+  const pipelineRunning = Boolean(pipelineStatus?.running || ["starting", "planned", "running"].includes(pipelineStatus?.state ?? ""));
+  const canRunDomPipeline = useMemo(
+    () => domPath.trim().length > 0 && modelPath.trim().length > 0 && outputDir.trim().length > 0 && !busy && !pipelineRunning,
+    [busy, domPath, modelPath, outputDir, pipelineRunning]
+  );
+  const pipelineProgressValue =
+    typeof pipelineStatus?.percent === "number" && Number.isFinite(pipelineStatus.percent)
+      ? Math.max(0, Math.min(1, pipelineStatus.percent / 100))
+      : undefined;
   const open3dLoading = Boolean(open3dStatus && ["starting", "loading", "building", "serving"].includes(open3dStatus.state));
 
   const guidedTargetOptions = useMemo(
@@ -286,6 +327,17 @@ function App() {
     void refreshEmbeddedOpen3DStatus(false);
     return () => window.clearInterval(timer);
   }, [backend, open3dLoading, open3dStatus?.pid, open3dStatus?.state]);
+
+  useEffect(() => {
+    if (!backend || !pipelineJobId || pipelineStatus?.running === false) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void refreshDomPipelineStatus(false);
+    }, 1000);
+    void refreshDomPipelineStatus(false);
+    return () => window.clearInterval(timer);
+  }, [backend, pipelineJobId, pipelineStatus?.running, pipelineStatus?.state]);
 
   useEffect(() => {
     if (
@@ -420,6 +472,38 @@ function App() {
     if (selected) {
       setOutputDir(selected);
       appendLog(`选择输出目录：${selected}`);
+    }
+  }
+
+  async function chooseDom() {
+    const selected = await window.railCurve.openDomDialog();
+    if (selected) {
+      setDomPath(selected);
+      appendLog(`选择 DOM：${selected}`);
+    }
+  }
+
+  async function chooseModel() {
+    const selected = await window.railCurve.openModelDialog();
+    if (selected) {
+      setModelPath(selected);
+      appendLog(`选择语义分割权重：${selected}`);
+    }
+  }
+
+  async function chooseDsm() {
+    const selected = await window.railCurve.openDsmDialog();
+    if (selected) {
+      setDsmPath(selected);
+      appendLog(`选择 DSM：${selected}`);
+    }
+  }
+
+  async function chooseLasDir() {
+    const selected = await window.railCurve.openLasDirectoryDialog();
+    if (selected) {
+      setLasDir(selected);
+      appendLog(`选择 LAS 目录：${selected}`);
     }
   }
 
@@ -818,6 +902,83 @@ function App() {
     }
   }
 
+  async function startDomPipeline() {
+    if (!canRunDomPipeline) {
+      appendLog("请先选择 DOM、DeepLab 权重和输出目录。");
+      return;
+    }
+    setBusy(true);
+    try {
+      const status = await apiRequest<DomPipelineStatus>("/api/dom-pipeline/start", {
+        method: "POST",
+        body: JSON.stringify({
+          dom_path: domPath,
+          model_path: modelPath,
+          output_dir: outputDir,
+          dsm_path: dsmPath.trim() || null,
+          las_dir: lasDir.trim() || null,
+          profile: "strict-auto",
+          device: pipelineDevice.trim() || "cuda",
+          threshold: Number(pipelineThreshold) || 0.5,
+          max_tiles: Math.max(0, Number(pipelineMaxTiles) || 0),
+          force: pipelineForce,
+          epsg: 32651
+        })
+      });
+      setPipelineJobId(status.job_id);
+      setPipelineStatus(status);
+      setLastResult(compactDomPipelineStatus(status));
+      setActivePage("export");
+      appendLog(`DOM 流水线已启动：${status.job_id}`);
+    } catch (error) {
+      appendLog(error instanceof Error ? error.message : "DOM 流水线启动失败。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function refreshDomPipelineStatus(verbose: boolean) {
+    if (!pipelineJobId) {
+      return;
+    }
+    const previousState = pipelineStatus?.state;
+    try {
+      const status = await apiRequest<DomPipelineStatus>(`/api/dom-pipeline/status/${pipelineJobId}`);
+      setPipelineStatus(status);
+      setLastResult(compactDomPipelineStatus(status));
+      if (status.state === "completed" && previousState !== "completed") {
+        appendLog(`DOM 流水线完成：${status.outputs?.centerline_3d_shp ?? status.out_dir}`);
+      } else if (status.state === "failed" && previousState !== "failed") {
+        appendLog(status.error || status.message || "DOM 流水线失败。");
+      } else if (verbose) {
+        appendLog(status.message || "DOM 流水线状态已刷新。");
+      }
+    } catch (error) {
+      if (verbose) {
+        appendLog(error instanceof Error ? error.message : "读取 DOM 流水线状态失败。");
+      }
+    }
+  }
+
+  async function stopDomPipeline() {
+    if (!pipelineJobId) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const status = await apiRequest<DomPipelineStatus>(`/api/dom-pipeline/stop/${pipelineJobId}`, {
+        method: "POST"
+      });
+      setPipelineStatus(status);
+      setLastResult(compactDomPipelineStatus(status));
+      appendLog("DOM 流水线已停止。");
+    } catch (error) {
+      appendLog(error instanceof Error ? error.message : "停止 DOM 流水线失败。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function exportCenterline() {
     if (!canRun) {
       appendLog("请先选择点云和输出目录。");
@@ -859,14 +1020,13 @@ function App() {
       <main className="app-shell-pages">
         <header className="app-commandbar">
           <div className="commandbar-title">
-            <Text className="eyebrow">轨道中心线工作台</Text>
-            <Title2 as="h1">轨道中心线标注与导出</Title2>
-            <Text size={200}>三步走：先导入点云，再在大画布上标注，最后导出结果。</Text>
+            <Text className="eyebrow">DOM 语义分割流水线</Text>
+            <Title2 as="h1">轨道 3D 中心线自动提取</Title2>
+            <Text size={200}>主流程：原始 DOM + DeepLab 权重 {"->"} 语义分割 {"->"} 后处理 {"->"} 3D 中心线文件。</Text>
           </div>
           <nav className="page-tabs" aria-label="主流程">
-            <PageTab active={activePage === "data"} label="数据导入" onClick={() => setActivePage("data")} />
-            <PageTab active={activePage === "annotate"} label="标注工作台" onClick={() => setActivePage("annotate")} />
-            <PageTab active={activePage === "export"} label="导出与日志" onClick={() => setActivePage("export")} />
+            <PageTab active={activePage === "data"} label="DOM 流水线" onClick={() => setActivePage("data")} />
+            <PageTab active={activePage === "export"} label="日志与结果" onClick={() => setActivePage("export")} />
           </nav>
           <div className="topbar-status">
             <Badge appearance="filled" color={health?.ok ? "success" : "warning"}>
@@ -874,13 +1034,94 @@ function App() {
             </Badge>
             <Text size={200} className="mono-text">{backend?.baseUrl ?? "等待后端地址"}</Text>
             <Button onClick={() => void checkHealth(true)} disabled={busy}>检查后端</Button>
-            {busy ? <ProgressBar thickness="medium" /> : null}
+            {busy || pipelineRunning ? <ProgressBar thickness="medium" value={pipelineRunning ? pipelineProgressValue : undefined} /> : null}
           </div>
         </header>
 
         {activePage === "data" ? (
           <section className="page-shell data-page">
-            <Card className="page-card primary-card">
+            <Card className="page-card primary-card dom-pipeline-card">
+              <CardHeader
+                header={<Title3 as="h3">DOM {"->"} 3D 中心线</Title3>}
+                description={<Text>这是现在的主流程：输入原始 DOM 和 DeepLab 权重，后端会按 strict-auto 路线完成语义分割、2D 后处理、LAS/DSM 补 Z，并输出 final_delivery。</Text>}
+              />
+              <div className="dom-pipeline-form">
+                <Field label="原始 DOM">
+                  <div className="path-field">
+                    <Input
+                      value={domPath}
+                      onChange={(event) => setDomPath(event.currentTarget.value)}
+                      placeholder="例如 D:/data/dom.tif"
+                      appearance="outline"
+                    />
+                    <Button onClick={() => void chooseDom()} disabled={busy || pipelineRunning}>选择 DOM</Button>
+                  </div>
+                </Field>
+                <Field label="DeepLab 权重">
+                  <div className="path-field">
+                    <Input
+                      value={modelPath}
+                      onChange={(event) => setModelPath(event.currentTarget.value)}
+                      placeholder="rail_semantic_deeplab_resnet50.pt"
+                      appearance="outline"
+                    />
+                    <Button onClick={() => void chooseModel()} disabled={busy || pipelineRunning}>选择权重</Button>
+                  </div>
+                </Field>
+                <Field label="输出目录">
+                  <div className="path-field">
+                    <Input
+                      value={outputDir}
+                      onChange={(event) => setOutputDir(event.currentTarget.value)}
+                      placeholder="例如 D:/rail-curve-extractor/output/dom_centerline_strict_auto_v1"
+                      appearance="outline"
+                    />
+                    <Button onClick={() => void chooseOutput()} disabled={busy || pipelineRunning}>选择目录</Button>
+                  </div>
+                </Field>
+                <details className="config-details">
+                  <summary>DSM / LAS 与运行参数</summary>
+                  <div className="dom-grid-two">
+                    <Field label="DSM 栅格">
+                      <div className="path-field">
+                        <Input value={dsmPath} onChange={(event) => setDsmPath(event.currentTarget.value)} placeholder="可留空使用脚本默认值" appearance="outline" />
+                        <Button onClick={() => void chooseDsm()} disabled={busy || pipelineRunning}>选择 DSM</Button>
+                      </div>
+                    </Field>
+                    <Field label="LAS/LAZ 目录">
+                      <div className="path-field">
+                        <Input value={lasDir} onChange={(event) => setLasDir(event.currentTarget.value)} placeholder="可留空使用脚本默认值" appearance="outline" />
+                        <Button onClick={() => void chooseLasDir()} disabled={busy || pipelineRunning}>选择目录</Button>
+                      </div>
+                    </Field>
+                    <Field label="推理设备">
+                      <Input value={pipelineDevice} onChange={(event) => setPipelineDevice(event.currentTarget.value)} placeholder="cuda / cpu" appearance="outline" />
+                    </Field>
+                    <Field label="分割阈值">
+                      <Input value={pipelineThreshold} onChange={(event) => setPipelineThreshold(event.currentTarget.value)} type="number" min={0} max={1} step={0.01} appearance="outline" />
+                    </Field>
+                    <Field label="最大瓦片数">
+                      <Input value={pipelineMaxTiles} onChange={(event) => setPipelineMaxTiles(event.currentTarget.value)} type="number" min={0} appearance="outline" />
+                    </Field>
+                    <label className="radio-pill force-toggle">
+                      <input type="checkbox" checked={pipelineForce} onChange={(event) => setPipelineForce(event.currentTarget.checked)} />
+                      强制重跑已有阶段
+                    </label>
+                  </div>
+                </details>
+                <DomPipelineProgress status={pipelineStatus} progressValue={pipelineProgressValue} />
+                <div className="button-row">
+                  <Button appearance="primary" size="large" onClick={() => void startDomPipeline()} disabled={!canRunDomPipeline}>
+                    {busy ? <Spinner size="tiny" /> : null}
+                    开始 DOM 流水线
+                  </Button>
+                  <Button onClick={() => void refreshDomPipelineStatus(true)} disabled={!pipelineJobId || busy}>刷新进度</Button>
+                  <Button onClick={() => void stopDomPipeline()} disabled={!pipelineRunning || busy}>停止</Button>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="page-card primary-card legacy-pointcloud-card">
               <CardHeader
                 header={<Title3 as="h3">选择数据源</Title3>}
                 description={<Text>可以选单个 LAS/LAZ，也可以直接选整个 DJI Terra 输出目录，软件会自动找分块点云。</Text>}
@@ -905,7 +1146,7 @@ function App() {
               </div>
             </Card>
 
-            <Card className="page-card">
+            <Card className="page-card legacy-pointcloud-card">
               <CardHeader header={<Title3 as="h3">点云概览</Title3>} />
               {pointInfo ? (
                 <>
@@ -931,7 +1172,7 @@ function App() {
               )}
             </Card>
 
-            <Card className="page-card guide-card">
+            <Card className="page-card guide-card legacy-pointcloud-card">
               <CardHeader header={<Title3 as="h3">下一步</Title3>} />
               <Text>1. 读取点云信息，确认 RGB、点数和分块。</Text>
               <Text>2. 进入标注工作台，加载全图后放大到轨道附近。</Text>
@@ -1131,26 +1372,20 @@ function App() {
           <section className="page-shell export-page">
             <Card className="page-card primary-card">
               <CardHeader
-                header={<Title3 as="h3">导出中心线</Title3>}
-                description={<Text>导出前建议确认框选区域和人工路径点；配置会自动写入当前标注结果。</Text>}
+                header={<Title3 as="h3">DOM 流水线状态</Title3>}
+                description={<Text>这里显示语义分割和后处理进度。完成后重点验收 final_delivery 里的 2D/3D Shapefile。</Text>}
               />
-              <Field label="输出目录">
-                <Input
-                  value={outputDir}
-                  onChange={(event) => setOutputDir(event.currentTarget.value)}
-                  placeholder="选择输出目录"
-                  appearance="outline"
-                />
-              </Field>
+              <DomPipelineProgress status={pipelineStatus} progressValue={pipelineProgressValue} />
               <div className="button-row">
-                <Button onClick={() => void chooseOutput()} disabled={busy}>选择目录</Button>
-                <Button appearance="primary" size="large" onClick={() => void exportCenterline()} disabled={!canRun}>
+                <Button appearance="primary" size="large" onClick={() => void startDomPipeline()} disabled={!canRunDomPipeline}>
                   {busy ? <Spinner size="tiny" /> : null}
-                  分析并导出
+                  开始 DOM 流水线
                 </Button>
+                <Button onClick={() => void refreshDomPipelineStatus(true)} disabled={!pipelineJobId || busy}>刷新进度</Button>
+                <Button onClick={() => setActivePage("data")}>修改输入</Button>
               </div>
-              <details className="config-details" open>
-                <summary>高级 JSON 配置</summary>
+              <details className="config-details">
+                <summary>旧 JSON 配置（点云中心线已停用）</summary>
                 <Button onClick={() => void loadDefaultConfig()} disabled={busy}>加载默认配置</Button>
                 <Textarea
                   className="config-editor"
@@ -1214,7 +1449,8 @@ function RoiCanvas(props: {
   }, [props.preview, props.focusPreview, props.focusLoading, props.selectedRoi, props.resultOverlay, dragStart, dragCurrent, panStart, viewBounds, props.guidedTracks, props.guidedTurnouts, props.activeGuidedTarget]);
 
   useEffect(() => {
-    if (!props.preview) {
+    const preview = props.preview;
+    if (!preview) {
       setViewBounds(null);
       props.onViewBoundsChange(null);
       return;
@@ -1223,7 +1459,7 @@ function RoiCanvas(props: {
       if (currentBounds) {
         return currentBounds;
       }
-      const nextBounds = boundsFromPreview(props.preview);
+      const nextBounds = boundsFromPreview(preview);
       props.onViewBoundsChange(nextBounds);
       return nextBounds;
     });
@@ -1694,6 +1930,45 @@ function Metric(props: { label: string; value: string }) {
   );
 }
 
+function DomPipelineProgress(props: { status: DomPipelineStatus | null; progressValue?: number }) {
+  const status = props.status;
+  if (!status) {
+    return (
+      <div className="pipeline-progress idle">
+        <Text weight="semibold">尚未运行</Text>
+        <Text size={200} className="muted-text">选择 DOM、权重和输出目录后启动。输出会写入 final_delivery。</Text>
+      </div>
+    );
+  }
+  const stageText =
+    status.stage_index && status.stage_count
+      ? `${status.stage_index}/${status.stage_count} ${status.stage_name ?? ""}`
+      : status.stage_name ?? "--";
+  const percentText =
+    typeof status.percent === "number" && Number.isFinite(status.percent)
+      ? `${status.percent.toFixed(1)}%`
+      : "--";
+  const badgeColor = status.state === "failed" ? "danger" : status.state === "completed" ? "success" : "informative";
+  return (
+    <div className="pipeline-progress">
+      <div className="pipeline-progress-head">
+        <Badge appearance="filled" color={badgeColor}>{status.state}</Badge>
+        <Text weight="semibold">{status.message || status.stage_description || "DOM 流水线运行中"}</Text>
+        <Text size={200} className="mono-text">{percentText}</Text>
+      </div>
+      <ProgressBar className="truth-progress" thickness="large" value={props.progressValue} />
+      <div className="pipeline-progress-meta">
+        <Metric label="阶段" value={stageText} />
+        <Metric label="进程" value={status.pid ? String(status.pid) : "--"} />
+        <Metric label="3D 输出" value={String(status.outputs?.centerline_3d_shp ?? "--")} />
+        <Metric label="日志" value={lastPathPart(status.log_path)} />
+      </div>
+      {status.error ? <Text className="error-text">{status.error}</Text> : null}
+      <Text size={200} className="mono-text">输出目录：{status.out_dir}</Text>
+    </div>
+  );
+}
+
 function Open3DProgressPanel(props: { status: EmbeddedOpen3DStatus; onStop: () => void }) {
   const { status } = props;
   const hasRealPercent = typeof status.percent === "number" && Number.isFinite(status.percent);
@@ -1864,6 +2139,23 @@ function compactResultForDisplay(result: ApiResult): ApiResult {
         rail_preview_points: track.rail_points_xy.length
       }))
     }
+  };
+}
+
+function compactDomPipelineStatus(status: DomPipelineStatus): ApiResult {
+  return {
+    job_id: status.job_id,
+    state: status.state,
+    message: status.message,
+    stage: status.stage_name,
+    stage_status: status.stage_status,
+    progress_percent: status.percent,
+    out_dir: status.out_dir,
+    outputs: status.outputs ?? {},
+    summary_path: status.summary_path,
+    log_path: status.log_path,
+    progress_path: status.progress_path,
+    error: status.error
   };
 }
 

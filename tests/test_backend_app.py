@@ -80,6 +80,9 @@ class BackendAppTest(unittest.TestCase):
         class DummyProcess:
             pid = 12345
 
+            def poll(self) -> None:
+                return None
+
         client = TestClient(app)
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "points.npy"
@@ -102,6 +105,60 @@ class BackendAppTest(unittest.TestCase):
         self.assertIn("--bounds", command)
         self.assertEqual(command[-4:], ["1.0", "2.0", "3.0", "4.0"])
         self.assertEqual(response.json()["bounds"], [1.0, 2.0, 3.0, 4.0])
+
+    def test_dom_pipeline_start_launches_guided_pipeline_with_progress_file(self) -> None:
+        class DummyProcess:
+            pid = 23456
+
+            def poll(self) -> None:
+                return None
+
+            def terminate(self) -> None:
+                return None
+
+            def wait(self, timeout: float | None = None) -> int:
+                return 0
+
+            def kill(self) -> None:
+                return None
+
+        client = TestClient(app)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            dom = root / "dom.tif"
+            model = root / "rail_semantic_deeplab_resnet50.pt"
+            out_dir = root / "out"
+            dom.write_bytes(b"fake")
+            model.write_bytes(b"fake")
+
+            with patch("rail_curve_extractor.backend.app.subprocess.Popen", return_value=DummyProcess()) as popen:
+                response = client.post(
+                    "/api/dom-pipeline/start",
+                    json={
+                        "dom_path": str(dom),
+                        "model_path": str(model),
+                        "output_dir": str(out_dir),
+                        "device": "cpu",
+                        "max_tiles": 1,
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["state"], "starting")
+        self.assertTrue(payload["running"])
+        self.assertIn("progress_path", payload)
+        command = popen.call_args.args[0]
+        self.assertIn("run_dom_to_3d_centerline_guided_pipeline.py", command[1])
+        self.assertIn("--progress-file", command)
+        self.assertIn("--profile", command)
+        self.assertIn("strict-auto", command)
+        self.assertIn("--dom", command)
+        self.assertIn(str(dom), command)
+        self.assertIn("--deeplab-model", command)
+        self.assertIn(str(model), command)
+        self.assertIn("--device", command)
+        self.assertIn("cpu", command)
 
     def test_point_cloud_preview_samples_points(self) -> None:
         client = TestClient(app)

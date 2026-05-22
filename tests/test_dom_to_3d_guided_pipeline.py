@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -112,3 +113,26 @@ def test_start_at_keeps_late_stage_reruns_explicit(tmp_path: Path) -> None:
     args = module.build_parser().parse_args(["--out-dir", str(tmp_path), "--start-at", "build_track_band_priors"])
 
     assert args.start_at == "build_track_band_priors"
+
+
+def test_dry_run_writes_progress_file(tmp_path: Path, monkeypatch) -> None:
+    module = _load_module()
+    progress_path = tmp_path / "progress.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_dom_to_3d_centerline_guided_pipeline.py",
+            "--out-dir",
+            str(tmp_path / "out"),
+            "--progress-file",
+            str(progress_path),
+            "--dry-run",
+        ],
+    )
+
+    assert module.main() == 0
+    progress = json.loads(progress_path.read_text(encoding="utf-8"))
+    assert progress["state"] == "completed"
+    assert progress["percent"] == 100.0
+    assert progress["stage_count"] > 0

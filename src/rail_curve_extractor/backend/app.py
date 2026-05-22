@@ -38,6 +38,7 @@ app.add_middleware(
 _RESULTS: dict[str, PipelineResult] = {}
 _EMBEDDED_VIEWER_PROCESS: subprocess.Popen[Any] | None = None
 _EMBEDDED_VIEWER_LOG_HANDLE: Any | None = None
+_DOM_PIPELINE_JOBS: dict[str, dict[str, Any]] = {}
 OPEN3D_WEBRTC_URL = "http://127.0.0.1:8888"
 
 
@@ -74,6 +75,20 @@ class PointCloudPreviewRequest(BaseModel):
     input_path: str
     max_points: int = 80_000
     bounds: dict[str, float] | None = None
+
+
+class DomPipelineStartRequest(BaseModel):
+    dom_path: str
+    model_path: str
+    output_dir: str
+    dsm_path: str | None = None
+    las_dir: str | None = None
+    profile: str = "strict-auto"
+    device: str = "cuda"
+    threshold: float = 0.50
+    max_tiles: int = 0
+    force: bool = False
+    epsg: int = 32651
 
 
 @app.middleware("http")
@@ -181,6 +196,119 @@ def export(request: ExportRequest) -> dict[str, Any]:
         "summary": _json_safe(summary),
         "overlay": _result_overlay(result),
     }
+
+
+@app.post(f"{API_PREFIX}/dom-pipeline/start")
+def start_dom_pipeline(request: DomPipelineStartRequest) -> dict[str, Any]:
+    dom_path = _existing_path(request.dom_path, "DOM")
+    model_path = _existing_path(request.model_path, "DeepLab 权重")
+    output_dir = Path(request.output_dir).expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    dsm_path = _existing_path(request.dsm_path, "DSM") if request.dsm_path else None
+    las_dir = _existing_path(request.las_dir, "LAS 目录") if request.las_dir else None
+
+    if request.profile not in {"strict-auto", "dom-full", "accepted-baseline"}:
+        raise HTTPException(status_code=400, detail=f"不支持的流水线 profile：{request.profile}")
+
+    job_id = uuid4().hex
+    log_path, progress_path = _dom_pipeline_paths(job_id)
+    command = [
+        str(_pipeline_python_executable()),
+        str(_project_root() / "scripts" / "run_dom_to_3d_centerline_guided_pipeline.py"),
+        "--profile",
+        request.profile,
+        "--dom",
+        str(dom_path),
+        "--deeplab-model",
+        str(model_path),
+        "--out-dir",
+        str(output_dir),
+        "--device",
+        request.device,
+        "--threshold",
+        str(max(0.0, min(1.0, float(request.threshold)))),
+        "--max-tiles",
+        str(max(0, int(request.max_tiles))),
+        "--epsg",
+        str(int(request.epsg)),
+        "--progress-file",
+        str(progress_path),
+    ]
+    if dsm_path is not None:
+        command.extend(["--dsm", str(dsm_path)])
+    if las_dir is not None:
+        command.extend(["--las-dir", str(las_dir)])
+    if request.force:
+        command.append("--force")
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json_atomic(
+        progress_path,
+        {
+            "state": "starting",
+            "message": "正在启动 DOM 语义分割流水线",
+            "stage_index": 0,
+            "stage_count": 0,
+            "percent": 0.0,
+            "out_dir": str(output_dir),
+            "updated_at": time.time(),
+        },
+    )
+    env = os.environ.copy()
+    env["PYTHONPATH"] = _pythonpath_with_project_src(env.get("PYTHONPATH", ""))
+    log_handle = log_path.open("w", encoding="utf-8")
+    process = subprocess.Popen(
+        command,
+        cwd=str(_project_root()),
+        env=env,
+        stdout=log_handle,
+        stderr=subprocess.STDOUT,
+    )
+    _DOM_PIPELINE_JOBS[job_id] = {
+        "process": process,
+        "log_handle": log_handle,
+        "command": command,
+        "log_path": log_path,
+        "progress_path": progress_path,
+        "output_dir": output_dir,
+        "started_at": time.time(),
+    }
+    return _dom_pipeline_status(job_id)
+
+
+@app.get(f"{API_PREFIX}/dom-pipeline/status/{{job_id}}")
+def dom_pipeline_status(job_id: str) -> dict[str, Any]:
+    return _dom_pipeline_status(job_id)
+
+
+@app.post(f"{API_PREFIX}/dom-pipeline/stop/{{job_id}}")
+def stop_dom_pipeline(job_id: str) -> dict[str, Any]:
+    job = _DOM_PIPELINE_JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"找不到 DOM 流水线任务：{job_id}")
+    process: subprocess.Popen[Any] | None = job.get("process")
+    stopped = False
+    if process is not None and process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+        stopped = True
+    _close_job_log_handle(job)
+    _write_json_atomic(
+        Path(job["progress_path"]),
+        {
+            **_read_json_if_exists(Path(job["progress_path"])),
+            "state": "stopped",
+            "message": "DOM 流水线已停止",
+            "updated_at": time.time(),
+        },
+    )
+    status = _dom_pipeline_status(job_id)
+    status["stopped"] = stopped
+    return status
 
 
 @app.post(f"{API_PREFIX}/viewer/open")
@@ -339,6 +467,95 @@ def _preview_response_bounds(points_xy: np.ndarray, xy_bounds: tuple[float, floa
             "maximum": points_xy.max(axis=0).astype(float).tolist(),
         }
     return {"minimum": [0.0, 0.0], "maximum": [0.0, 0.0]}
+
+
+def _dom_pipeline_paths(job_id: str) -> tuple[Path, Path]:
+    runtime_dir = _project_root() / ".codex-runtime" / "dom-pipeline"
+    return runtime_dir / f"{job_id}.log", runtime_dir / f"{job_id}.progress.json"
+
+
+def _pipeline_python_executable() -> Path:
+    return Path(sys.executable)
+
+
+def _dom_pipeline_status(job_id: str) -> dict[str, Any]:
+    job = _DOM_PIPELINE_JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"找不到 DOM 流水线任务：{job_id}")
+
+    process: subprocess.Popen[Any] | None = job.get("process")
+    return_code = process.poll() if process is not None else job.get("return_code")
+    if return_code is not None:
+        job["return_code"] = return_code
+        _close_job_log_handle(job)
+
+    log_path = Path(job["log_path"])
+    progress_path = Path(job["progress_path"])
+    progress = _read_json_if_exists(progress_path)
+    state = str(progress.get("state") or "running")
+    if return_code is not None and state not in {"completed", "failed", "stopped"}:
+        state = "completed" if return_code == 0 else "failed"
+        progress = {
+            **progress,
+            "state": state,
+            "message": "DOM 流水线已结束" if return_code == 0 else f"DOM 流水线进程退出，退出码 {return_code}",
+        }
+    return {
+        "job_id": job_id,
+        "state": state,
+        "message": str(progress.get("message") or ""),
+        "stage_name": progress.get("stage_name"),
+        "stage_description": progress.get("stage_description"),
+        "stage_status": progress.get("stage_status"),
+        "stage_index": progress.get("stage_index"),
+        "stage_count": progress.get("stage_count"),
+        "percent": progress.get("percent"),
+        "out_dir": str(job["output_dir"]),
+        "outputs": progress.get("outputs") or {},
+        "summary_path": progress.get("summary_path"),
+        "latest_event": progress.get("latest_event"),
+        "error": progress.get("error"),
+        "pid": process.pid if process is not None else None,
+        "return_code": return_code,
+        "running": process is not None and return_code is None,
+        "started_at": job.get("started_at"),
+        "updated_at": progress.get("updated_at"),
+        "log_path": str(log_path),
+        "progress_path": str(progress_path),
+        "command": job.get("command", []),
+    }
+
+
+def _close_job_log_handle(job: dict[str, Any]) -> None:
+    handle = job.get("log_handle")
+    if handle is not None:
+        handle.close()
+        job["log_handle"] = None
+
+
+def _read_json_if_exists(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_name(f"{path.name}.{time.time_ns()}.tmp")
+    temporary_path.write_text(json.dumps(_json_safe(payload), ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary_path.replace(path)
+
+
+def _stop_dom_pipeline_jobs() -> None:
+    for job in list(_DOM_PIPELINE_JOBS.values()):
+        process: subprocess.Popen[Any] | None = job.get("process")
+        if process is not None and process.poll() is None:
+            process.terminate()
+        _close_job_log_handle(job)
 
 
 def _embedded_viewer_paths() -> tuple[Path, Path]:
@@ -567,6 +784,7 @@ def _pythonpath_with_project_src(existing_pythonpath: str) -> str:
 
 
 atexit.register(_stop_embedded_viewer_process)
+atexit.register(_stop_dom_pipeline_jobs)
 
 
 def build_parser() -> argparse.ArgumentParser:

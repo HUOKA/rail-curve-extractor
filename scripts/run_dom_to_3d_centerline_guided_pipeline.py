@@ -77,6 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-tiles", type=int, default=0, help="0 means all tiles from the tile index.")
     parser.add_argument("--force", action="store_true", help="Run every stage even if its declared outputs already exist.")
     parser.add_argument("--dry-run", action="store_true", help="Write and print the plan without running stages.")
+    parser.add_argument("--progress-file", type=Path, default=None, help="Optional JSON file updated after each pipeline stage.")
     parser.add_argument("--stop-after", default="", help="Optional stage name; stop after this stage finishes.")
     parser.add_argument("--start-at", default="", help="Optional stage name; skip earlier stages and start here.")
     parser.add_argument("--skip-qa-crops", action=argparse.BooleanOptionalAction, default=True)
@@ -96,24 +97,47 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[1]
     out_dir = resolve_out_dir(args).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+    progress_file = args.progress_file.expanduser().resolve() if args.progress_file is not None else None
 
     stages = build_stages(args, repo_root=repo_root, out_dir=out_dir)
     plan = build_plan(args, repo_root=repo_root, out_dir=out_dir, stages=stages)
     write_json(out_dir / "pipeline_plan.json", plan)
+    write_progress(
+        progress_file,
+        state="planned" if args.dry_run else "starting",
+        message="Pipeline plan is ready.",
+        out_dir=out_dir,
+        stage_count=len(stages),
+        stage_index=0,
+        percent=0.0,
+        plan=plan,
+    )
     if args.dry_run:
         print(json.dumps(plan, ensure_ascii=False, indent=2))
+        write_progress(
+            progress_file,
+            state="completed",
+            message="Dry run plan written.",
+            out_dir=out_dir,
+            stage_count=len(stages),
+            stage_index=len(stages),
+            percent=100.0,
+            plan=plan,
+        )
         return 0
 
-    preflight(args, repo_root=repo_root)
     events: list[dict[str, Any]] = []
-    started = not bool(args.start_at)
-    for stage in stages:
-        if not started:
-            if args.start_at == stage.name:
-                started = True
-            else:
-                events.append(
-                    {
+    current_stage_name = ""
+    try:
+        preflight(args, repo_root=repo_root)
+        started = not bool(args.start_at)
+        for stage_index, stage in enumerate(stages, start=1):
+            current_stage_name = stage.name
+            if not started:
+                if args.start_at == stage.name:
+                    started = True
+                else:
+                    event = {
                         "stage": stage.name,
                         "description": stage.description,
                         "action": stage.action,
@@ -122,21 +146,95 @@ def main() -> int:
                         "status": "skipped_before_start",
                         "elapsed_s": 0.0,
                     }
-                )
-                continue
-        events.append(run_stage(stage, args=args, repo_root=repo_root, out_dir=out_dir))
-        if args.stop_after and args.stop_after == stage.name:
-            break
-    if args.start_at and not started:
-        raise ValueError(f"Unknown --start-at stage: {args.start_at}")
+                    events.append(event)
+                    write_progress(
+                        progress_file,
+                        state="running",
+                        message=f"Skipped before requested start stage: {stage.name}",
+                        out_dir=out_dir,
+                        stage_count=len(stages),
+                        stage_index=stage_index,
+                        stage_name=stage.name,
+                        stage_description=stage.description,
+                        stage_status=event["status"],
+                        percent=stage_index / max(len(stages), 1) * 100.0,
+                        latest_event=event,
+                    )
+                    continue
+            write_progress(
+                progress_file,
+                state="running",
+                message=stage.description,
+                out_dir=out_dir,
+                stage_count=len(stages),
+                stage_index=stage_index,
+                stage_name=stage.name,
+                stage_description=stage.description,
+                stage_status="running",
+                percent=(stage_index - 1) / max(len(stages), 1) * 100.0,
+                latest_event={
+                    "stage": stage.name,
+                    "description": stage.description,
+                    "action": stage.action,
+                    "command": subprocess.list2cmdline(stage.command) if stage.command else "",
+                    "outputs": [str(path) for path in stage.outputs],
+                    "status": "running",
+                    "elapsed_s": 0.0,
+                },
+            )
+            event = run_stage(stage, args=args, repo_root=repo_root, out_dir=out_dir)
+            events.append(event)
+            write_progress(
+                progress_file,
+                state="running",
+                message=f"Stage finished: {stage.name}",
+                out_dir=out_dir,
+                stage_count=len(stages),
+                stage_index=stage_index,
+                stage_name=stage.name,
+                stage_description=stage.description,
+                stage_status=event["status"],
+                percent=stage_index / max(len(stages), 1) * 100.0,
+                latest_event=event,
+            )
+            if args.stop_after and args.stop_after == stage.name:
+                break
+        if args.start_at and not started:
+            raise ValueError(f"Unknown --start-at stage: {args.start_at}")
 
-    summary = build_summary(args, repo_root=repo_root, out_dir=out_dir, stages=stages, events=events)
-    write_json(out_dir / "pipeline_summary.json", summary)
-    copy_delivery_package(args.profile, out_dir)
-    if args.profile == PROFILE_STRICT_AUTO:
-        run_strict_auto_qa(args, repo_root=repo_root, out_dir=out_dir)
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
-    return 0
+        summary = build_summary(args, repo_root=repo_root, out_dir=out_dir, stages=stages, events=events)
+        write_json(out_dir / "pipeline_summary.json", summary)
+        copy_delivery_package(args.profile, out_dir)
+        if args.profile == PROFILE_STRICT_AUTO:
+            run_strict_auto_qa(args, repo_root=repo_root, out_dir=out_dir)
+        write_progress(
+            progress_file,
+            state="completed",
+            message="DOM to 3D centerline pipeline completed.",
+            out_dir=out_dir,
+            stage_count=len(stages),
+            stage_index=len(stages),
+            percent=100.0,
+            outputs=summary.get("outputs", {}),
+            summary_path=str(out_dir / "pipeline_summary.json"),
+            latest_event=events[-1] if events else None,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+        return 0
+    except Exception as exc:
+        write_progress(
+            progress_file,
+            state="failed",
+            message=str(exc),
+            out_dir=out_dir,
+            stage_count=len(stages),
+            stage_index=len(events) + 1,
+            stage_name=current_stage_name,
+            percent=min(len(events) / max(len(stages), 1) * 100.0, 99.0),
+            error=str(exc),
+            latest_event=events[-1] if events else None,
+        )
+        raise
 
 
 def resolve_out_dir(args: argparse.Namespace) -> Path:
@@ -852,6 +950,19 @@ def read_json_if_exists(path: Path) -> Any:
 
 def write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def write_progress(path: Path | None, **payload: Any) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {
+        "updated_at": time.time(),
+        **payload,
+    }
+    temporary_path = path.with_name(f"{path.name}.{time.time_ns()}.tmp")
+    temporary_path.write_text(json.dumps(data, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    temporary_path.replace(path)
 
 
 if __name__ == "__main__":

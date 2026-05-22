@@ -366,6 +366,72 @@ body {
   gap: 8px;
 }
 
+.dom-pipeline-card {
+  grid-column: 1 / -1;
+}
+
+.legacy-pointcloud-card {
+  display: none !important;
+}
+
+.dom-pipeline-form {
+  display: grid;
+  gap: 12px;
+}
+
+.dom-pipeline-form .path-field {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.dom-grid-two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.force-toggle {
+  align-self: end;
+  min-height: 38px;
+}
+
+.pipeline-progress {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d7e5ed;
+  border-radius: 16px;
+  padding: 14px;
+  background: #f8fbfd;
+}
+
+.pipeline-progress.idle {
+  background: rgba(248, 251, 253, 0.72);
+}
+
+.pipeline-progress-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.pipeline-progress-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pipeline-progress-meta .metric {
+  min-height: 64px;
+  padding: 10px;
+}
+
+.pipeline-progress-meta .metric span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tool-card .fui-Input,
 .tool-card .fui-Textarea,
 .viewer-topbar .fui-Button,

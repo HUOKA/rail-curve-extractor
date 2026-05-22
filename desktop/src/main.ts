@@ -159,6 +159,50 @@ ipcMain.handle("dialog:open-point-cloud-folder", async () => {
   return result.canceled ? null : result.filePaths[0];
 });
 
+ipcMain.handle("dialog:open-dom", async () => {
+  const result = await dialog.showOpenDialog({
+    title: "选择原始 DOM 影像",
+    properties: ["openFile"],
+    filters: [
+      { name: "Raster Images", extensions: ["tif", "tiff", "png", "jpg", "jpeg"] },
+      { name: "All Files", extensions: ["*"] }
+    ]
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle("dialog:open-model", async () => {
+  const result = await dialog.showOpenDialog({
+    title: "选择 DeepLab 语义分割权重",
+    properties: ["openFile"],
+    filters: [
+      { name: "PyTorch Models", extensions: ["pt", "pth"] },
+      { name: "All Files", extensions: ["*"] }
+    ]
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle("dialog:open-dsm", async () => {
+  const result = await dialog.showOpenDialog({
+    title: "选择 DSM 栅格",
+    properties: ["openFile"],
+    filters: [
+      { name: "Raster Images", extensions: ["tif", "tiff"] },
+      { name: "All Files", extensions: ["*"] }
+    ]
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle("dialog:open-las-dir", async () => {
+  const result = await dialog.showOpenDialog({
+    title: "选择 LAS/LAZ 点云目录",
+    properties: ["openDirectory"]
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
 ipcMain.handle("dialog:select-output-dir", async () => {
   const result = await dialog.showOpenDialog({
     title: "选择输出目录",
