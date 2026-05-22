@@ -1,8 +1,24 @@
 # Reproducible Workflow
 
-This repository is intended to be cloned from GitHub and run against local DJI Terra / drone mapping outputs. Large inputs, trained checkpoints, and generated `output/` folders are intentionally not tracked.
+本文是公开仓库保留的唯一正式流程说明。旧的交接记录、实验说明和截图验收记录已移入本机 `local_archive/legacy_markdown/`，该目录被 `.gitignore` 忽略，不作为 GitHub 交付内容。
 
-## 1. Install
+## 1. 目标
+
+从 DJI Terra 或同类航测重建成果中读取 DOM / DSM / LAS 数据，自动生成铁路中心线：
+
+```text
+DOM 正射影像
+-> 轨道语义分割
+-> 钢轨候选提取
+-> 轨距配对与拓扑后处理
+-> strict-auto 2D 中心线
+-> DSM/LAS 采样补 Z
+-> 2D/3D Shapefile 交付
+```
+
+当前仓库公开算法、脚本、测试和配置示例；不公开通海港生产数据、模型权重和输出成果。
+
+## 2. 安装
 
 ```powershell
 python -m venv .venv
@@ -10,55 +26,54 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[test]"
 ```
 
-Install DeepLab training/inference dependencies only when needed:
+按需安装深度学习依赖：
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -e ".[deeplab]"
-```
-
-YOLO training is optional:
-
-```powershell
 .\.venv\Scripts\python.exe -m pip install -e ".[yolo]"
 ```
 
-## 2. Prepare Local Inputs
+## 3. 本地数据布局
 
-Put production data outside Git, for example:
-
-```text
-data/production/terra_dom/dom.tif
-data/production/terra_dsm/dsm.tif
-data/production/terra_las/cloud0.las
-data/production/terra_las/cloud1.las
-```
-
-Use `data/config.example.json` or the root `config.example.json` as configuration references. Model checkpoints are also local artifacts; keep them outside Git or publish them separately as Release assets.
-
-## 3. Run Full 2D/3D Centerline Pipeline
-
-The current accepted production route is:
+生产数据不要提交到 Git。建议放在：
 
 ```text
-DOM tiles
--> DeepLab rail probability masks
--> rail candidate extraction
--> straight-band and turnout topology postprocess
--> strict-auto global 2D review package with tangent-smoothed turnout endpoints
--> LAS/DSM Z assignment
--> formal 2D/3D delivery package
+data/production/
+  terra_dom/
+    dom.tif
+  terra_dsm/
+    dsm.tif
+  terra_las/
+    cloud0.las
+    cloud1.las
 ```
 
-The final accepted packaging step is represented by:
+如果有模型权重，建议放在本地 `models/` 或外部路径。`*.pt`、`*.pth`、`*.onnx` 已被忽略。
+
+## 4. 核心流程
+
+语义分割可以重新训练，也可以直接使用已有权重推理。通海港当前验收思路是：不要把人工线或截图坐标写成生产约束，主线以 DOM 视觉中心和轨距证据为主，道岔支线在尖轨区域与主线保持切向连续。
+
+主要脚本入口：
+
+```text
+scripts/predict_rail_seg_deeplab_images.py
+scripts/build_deeplab_topology_centerline_network.py
+scripts/package_strict_auto_global_centerline_review.py
+scripts/add_z_to_deeplab_topology_centerline.py
+```
+
+正式打包步骤示例：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\package_strict_auto_global_centerline_review.py
+
 .\.venv\Scripts\python.exe scripts\add_z_to_deeplab_topology_centerline.py `
   --input output\dom_centerline_strict_auto_v1\global_centerline_review_tangent_occlusion\global_centerline_2d.geojson `
   --output-dir output\dom_centerline_strict_auto_v1\global_centerline_review_tangent_occlusion_z
 ```
 
-The formal delivery directory should contain:
+最终交付目录通常为：
 
 ```text
 output/dom_centerline_strict_auto_v1/final_delivery/
@@ -68,11 +83,17 @@ output/dom_centerline_strict_auto_v1/final_delivery/
   delivery_manifest.json
 ```
 
-`centerline_2d.shp` is a 2D `POLYLINE`; `centerline_3d.shp` is a 3D `POLYLINEZ`.
+`centerline_2d.shp` 应为 2D `POLYLINE`，`centerline_3d.shp` 应为 3D `POLYLINEZ`。
 
-## 4. Validation
+## 5. 验证
 
-Run focused tests:
+完整测试：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+中心线交付相关的重点测试：
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest `
@@ -83,23 +104,24 @@ Run focused tests:
   tests\test_deeplab_topology_centerline_network.py
 ```
 
-For a broader code check:
+## 6. Git 规则
 
-```powershell
-.\.venv\Scripts\python.exe -m pytest
-```
+只提交：
 
-Some training or UI tests may require optional dependencies, GUI libraries, CUDA, or local data.
+- 源码
+- 测试
+- 文档
+- 配置示例
+- 小型元数据
 
-## 5. Git Hygiene
-
-Tracked repository content should stay limited to code, tests, docs, configuration examples, and small metadata. Do not commit:
+不要提交：
 
 - `output/`
-- production `data/`
+- 生产 `data/`
 - `.codex-tasks/`
-- virtual environments
-- model checkpoints
-- LAS/LAZ/GeoTIFF/Shapefile generated artifacts
+- `local_archive/`
+- 虚拟环境
+- 模型权重
+- LAS/LAZ/GeoTIFF/Shapefile/GeoPackage/QGIS 工程等大型或生成文件
 
-Publish final delivery artifacts as Release assets or external packages, not as normal Git files.
+正式成果建议通过 Release asset、网盘或项目交付包发布，不放进普通 Git 历史。
