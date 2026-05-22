@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rail-curve-extractor"
+version = "0.1.0"
+description = "Extract rail points from lidar point clouds and export Isaac Sim compatible USD BasisCurves."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Codex" }
+]
+dependencies = [
+  "numpy>=2.1",
+  "scipy>=1.15",
+  "laspy[lazrs]>=2.5",
+  "rasterio>=1.4",
+  "pyproj>=3.7",
+  "pyshp>=2.3",
+  "shapely>=2.0",
+  "Pillow>=11.0",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "PySide6-Essentials>=6.11",
+  "pyqtgraph>=0.14"
+]
+
+[project.scripts]
+rail-curve-extractor = "rail_curve_extractor.cli:main"
+rail-curve-extractor-gui = "rail_curve_extractor.qt_app:main"
+rail-curve-extractor-backend = "rail_curve_extractor.backend.app:main"
+rail-curve-extractor-open3d = "rail_curve_extractor.open3d_viewer:main"
+rail-curve-extractor-tile-dom-gui = "rail_curve_extractor.dom_tiler_ui:main"
+
+[project.optional-dependencies]
+build = [
+  "PyInstaller>=6.20"
+]
+viewer = [
+  "open3d>=0.19"
+]
+test = [
+  "pytest>=8.0",
+  "httpx>=0.28"
+]
+deeplab = [
+  "torch>=2.4",
+  "torchvision>=0.19"
+]
+yolo = [
+  "opencv-python>=4.10",
+  "ultralytics>=8.3"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

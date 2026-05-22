@@ -1,0 +1,63 @@
+{
+  "roi": {
+    "x_min": null,
+    "x_max": null,
+    "y_min": null,
+    "y_max": null,
+    "z_min": null,
+    "z_max": null
+  },
+  "height_filter": {
+    "enabled": true,
+    "keep_top_percent": 0.55
+  },
+  "slice_length": 0.5,
+  "min_points_per_slice": 30,
+  "rail_pair_spacing_min": 1.2,
+  "rail_pair_spacing_max": 1.8,
+  "peak_min_prominence_ratio": 0.25,
+  "peak_search_bins": 80,
+  "peak_window_radius": 0.08,
+  "savgol_window": 9,
+  "savgol_polyorder": 2,
+  "xy_constraint": {
+    "mode": "free",
+    "smooth_window": 21,
+    "straight_trim_ratio": 0.1
+  },
+  "manual_anchor": {
+    "enabled": false,
+    "points": [],
+    "snap_distance": 2.5,
+    "score_weight": 14.0
+  },
+  "curve_width": 0.05,
+  "tracks": [],
+  "turnout": {
+    "enabled": false,
+    "roi": {
+      "x_min": null,
+      "x_max": null,
+      "y_min": null,
+      "y_max": null,
+      "z_min": null,
+      "z_max": null
+    },
+    "branch_min_separation": 0.45
+  },
+  "advanced_las": {
+    "enabled": true,
+    "sample_max_points": 1000000,
+    "ground_cell_size": 1.0,
+    "ground_percentile": 0.1,
+    "rail_height_min": 0.05,
+    "rail_height_max": 0.22,
+    "intensity_quantile_max": 0.5,
+    "occupancy_threshold": 6,
+    "min_component_points": 5000,
+    "component_cell_size": 1.0,
+    "corridor_quantile_low": 0.02,
+    "corridor_quantile_high": 0.98,
+    "corridor_margin": 1.5
+  }
+}
