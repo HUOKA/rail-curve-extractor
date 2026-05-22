@@ -79,15 +79,3 @@ output/dom_centerline_strict_auto_v1/final_delivery/
 ```powershell
 .\.venv\Scripts\python.exe -m pytest
 ```
-
-## Git 规则
-
-只提交源码、测试、配置示例和本说明。不要提交：
-
-- `output/`
-- 生产 `data/`
-- `.codex-tasks/`
-- `local_archive/`
-- 虚拟环境
-- 模型权重
-- LAS/LAZ/GeoTIFF/Shapefile/GeoPackage/QGIS 工程文件
