@@ -135,6 +135,7 @@ def raster_probe(request: RasterProbeRequest) -> dict[str, Any]:
             epsg = crs.to_epsg() if crs else None
             crs_name = crs.to_string() if crs else None
             bounds = dataset.bounds
+            pixel_w, pixel_h = _affine_pixel_size(dataset.transform)
             return {
                 "path": str(raster_path),
                 "epsg": int(epsg) if epsg else None,
@@ -149,13 +150,28 @@ def raster_probe(request: RasterProbeRequest) -> dict[str, Any]:
                     "right": float(bounds.right),
                     "top": float(bounds.top),
                 },
-                "pixel_size": [
-                    float(abs(dataset.transform.a)),
-                    float(abs(dataset.transform.e)),
-                ],
+                "pixel_size": [pixel_w, pixel_h],
             }
     except rasterio.RasterioIOError as exc:  # type: ignore[attr-defined]
         raise HTTPException(status_code=400, detail=f"无法读取栅格：{exc}") from exc
+
+
+def _affine_pixel_size(transform: Any) -> tuple[float, float]:
+    """Return real per-pixel ground size from a rasterio Affine.
+
+    Affine layout is (a, b, c, d, e, f) where the first column (a, d) maps the X
+    pixel axis to world coordinates and the second column (b, e) maps the Y
+    pixel axis. For north-up rasters b == d == 0 and the size is just |a|, |e|.
+    For rotated / sheared rasters that simplification is wrong; take the
+    Euclidean length of each column instead.
+    """
+    a = float(transform.a)
+    b = float(transform.b)
+    d = float(transform.d)
+    e = float(transform.e)
+    pixel_w = (a * a + d * d) ** 0.5
+    pixel_h = (b * b + e * e) ** 0.5
+    return pixel_w, pixel_h
 
 
 @app.get(f"{API_PREFIX}/system/devices")
