@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Candidate 01 — Overhead twin rails with extracted centerline.
+  Two parallel rails (muted) with a brighter centerline curve running between them,
+  meant to read as "this app finds the line that runs down the middle of the track".
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg01" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f1729"/>
+      <stop offset="1" stop-color="#0a0f1d"/>
+    </linearGradient>
+    <linearGradient id="line01" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6ee7b7"/>
+      <stop offset="1" stop-color="#34d399"/>
+    </linearGradient>
+  </defs>
+
+  <!-- rounded square base -->
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="url(#bg01)"/>
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="none" stroke="#34d399" stroke-opacity="0.25" stroke-width="2"/>
+
+  <!-- left rail -->
+  <path d="M 78 36 Q 70 128 96 220" fill="none" stroke="#5d6884" stroke-width="10" stroke-linecap="round"/>
+  <!-- right rail -->
+  <path d="M 178 36 Q 186 128 160 220" fill="none" stroke="#5d6884" stroke-width="10" stroke-linecap="round"/>
+
+  <!-- a few subtle sleepers across -->
+  <g stroke="#324a7a" stroke-width="4" stroke-linecap="round" opacity="0.55">
+    <line x1="74"  y1="68"  x2="182" y2="68"/>
+    <line x1="71"  y1="108" x2="184" y2="108"/>
+    <line x1="73"  y1="148" x2="183" y2="148"/>
+    <line x1="80"  y1="188" x2="174" y2="188"/>
+  </g>
+
+  <!-- extracted centerline (the highlight) -->
+  <path d="M 128 36 Q 122 128 128 220"
+        fill="none" stroke="url(#line01)" stroke-width="7" stroke-linecap="round"/>
+  <!-- glow halo on the centerline -->
+  <path d="M 128 36 Q 122 128 128 220"
+        fill="none" stroke="#6ee7b7" stroke-width="14" stroke-linecap="round" opacity="0.18"/>
+
+  <!-- end caps to mark "extracted" -->
+  <circle cx="128" cy="36"  r="6" fill="#6ee7b7"/>
+  <circle cx="128" cy="220" r="6" fill="#6ee7b7"/>
+</svg>

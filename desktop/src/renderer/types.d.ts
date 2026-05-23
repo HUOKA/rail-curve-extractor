@@ -17,3 +17,8 @@ declare global {
     railCurve: RailCurveBridge;
   }
 }
+
+declare module "*.svg" {
+  const content: string;
+  export default content;
+}

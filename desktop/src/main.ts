@@ -106,6 +106,7 @@ async function configureLocalViewerSession(localBackendPort: number): Promise<vo
 }
 
 function createWindow(): void {
+  const iconPath = path.join(projectRoot, "assets", "app_icon.ico");
   const window = new BrowserWindow({
     width: 1320,
     height: 860,
@@ -113,7 +114,8 @@ function createWindow(): void {
     minHeight: 720,
     useContentSize: true,
     title: "Rail Curve Extractor",
-    backgroundColor: nativeTheme.shouldUseDarkColors ? "#0b1120" : "#f6f7fb",
+    icon: iconPath,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#0a0f1d" : "#f6f7fb",
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),

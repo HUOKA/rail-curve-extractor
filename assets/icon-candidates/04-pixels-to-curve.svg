@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Candidate 04 — Pixels to curve.
+  A grid of pixels on the left fading into a clean vector curve on the right.
+  Tells the story of the whole pipeline: DOM raster -> centerline.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg04" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f1729"/>
+      <stop offset="1" stop-color="#0a0f1d"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="url(#bg04)"/>
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="none" stroke="#34d399" stroke-opacity="0.25" stroke-width="2"/>
+
+  <!-- Pixel block on the left, suggesting raster DOM. -->
+  <!-- Each "pixel" is a small rounded square; alpha varies along a diagonal stripe to evoke a track segment. -->
+  <g>
+    <!-- background pixels (dim) -->
+    <g fill="#1f2c4a">
+      <rect x="44"  y="56"  width="14" height="14" rx="2"/>
+      <rect x="62"  y="56"  width="14" height="14" rx="2"/>
+      <rect x="80"  y="56"  width="14" height="14" rx="2"/>
+      <rect x="98"  y="56"  width="14" height="14" rx="2"/>
+
+      <rect x="44"  y="74"  width="14" height="14" rx="2"/>
+      <rect x="62"  y="74"  width="14" height="14" rx="2"/>
+      <rect x="80"  y="74"  width="14" height="14" rx="2"/>
+      <rect x="98"  y="74"  width="14" height="14" rx="2"/>
+
+      <rect x="44"  y="92"  width="14" height="14" rx="2"/>
+      <rect x="62"  y="92"  width="14" height="14" rx="2"/>
+      <rect x="80"  y="92"  width="14" height="14" rx="2"/>
+      <rect x="98"  y="92"  width="14" height="14" rx="2"/>
+
+      <rect x="44"  y="110" width="14" height="14" rx="2"/>
+      <rect x="62"  y="110" width="14" height="14" rx="2"/>
+      <rect x="80"  y="110" width="14" height="14" rx="2"/>
+      <rect x="98"  y="110" width="14" height="14" rx="2"/>
+
+      <rect x="44"  y="128" width="14" height="14" rx="2"/>
+      <rect x="62"  y="128" width="14" height="14" rx="2"/>
+      <rect x="80"  y="128" width="14" height="14" rx="2"/>
+      <rect x="98"  y="128" width="14" height="14" rx="2"/>
+
+      <rect x="44"  y="146" width="14" height="14" rx="2"/>
+      <rect x="62"  y="146" width="14" height="14" rx="2"/>
+      <rect x="80"  y="146" width="14" height="14" rx="2"/>
+      <rect x="98"  y="146" width="14" height="14" rx="2"/>
+    </g>
+
+    <!-- "lit" pixels along a diagonal: the rail signal in the raster -->
+    <g fill="#34d399">
+      <rect x="44"  y="146" width="14" height="14" rx="2" opacity="0.85"/>
+      <rect x="62"  y="128" width="14" height="14" rx="2" opacity="0.95"/>
+      <rect x="62"  y="110" width="14" height="14" rx="2" opacity="0.85"/>
+      <rect x="80"  y="92"  width="14" height="14" rx="2" opacity="0.95"/>
+      <rect x="80"  y="74"  width="14" height="14" rx="2" opacity="0.85"/>
+      <rect x="98"  y="56"  width="14" height="14" rx="2" opacity="0.95"/>
+    </g>
+  </g>
+
+  <!-- Arrow connector -->
+  <g stroke="#6ee7b7" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="120" y1="128" x2="148" y2="128"/>
+    <polyline points="140,120 148,128 140,136"/>
+  </g>
+
+  <!-- Smooth curve on the right, evolving from those lit pixels. -->
+  <path d="M 156 188 Q 184 128 220 64"
+        fill="none" stroke="#6ee7b7" stroke-width="6" stroke-linecap="round"/>
+  <path d="M 156 188 Q 184 128 220 64"
+        fill="none" stroke="#6ee7b7" stroke-width="14" stroke-linecap="round" opacity="0.16"/>
+
+  <!-- Endpoint dots -->
+  <circle cx="156" cy="188" r="5" fill="#6ee7b7"/>
+  <circle cx="220" cy="64" r="5" fill="#6ee7b7"/>
+</svg>

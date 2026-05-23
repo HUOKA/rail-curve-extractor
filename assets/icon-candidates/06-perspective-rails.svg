@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Candidate 06 — Perspective rails vanishing toward a horizon, with the centerline glowing forward.
+  More cinematic / poster-like; intuitive for non-technical viewers.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg06" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#111c33"/>
+      <stop offset="0.55" stop-color="#0c1426"/>
+      <stop offset="1" stop-color="#070b18"/>
+    </linearGradient>
+    <radialGradient id="horizon06" cx="0.5" cy="0.42" r="0.35">
+      <stop offset="0" stop-color="#34d399" stop-opacity="0.65"/>
+      <stop offset="1" stop-color="#34d399" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="cl06" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6ee7b7" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#6ee7b7" stop-opacity="1"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="url(#bg06)"/>
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="none" stroke="#34d399" stroke-opacity="0.25" stroke-width="2"/>
+
+  <!-- horizon glow -->
+  <ellipse cx="128" cy="108" rx="92" ry="42" fill="url(#horizon06)"/>
+
+  <!-- horizon line (subtle) -->
+  <line x1="40" y1="108" x2="216" y2="108" stroke="#243152" stroke-width="2"/>
+
+  <!-- left rail going to vanishing point -->
+  <line x1="56" y1="222" x2="118" y2="108" stroke="#5d6884" stroke-width="9" stroke-linecap="round"/>
+  <!-- right rail going to vanishing point -->
+  <line x1="200" y1="222" x2="138" y2="108" stroke="#5d6884" stroke-width="9" stroke-linecap="round"/>
+
+  <!-- sleepers (perspective foreshortening) -->
+  <g stroke="#324a7a" stroke-width="4" stroke-linecap="round" opacity="0.7">
+    <line x1="60"  y1="216" x2="196" y2="216"/>
+    <line x1="76"  y1="190" x2="180" y2="190"/>
+    <line x1="90"  y1="168" x2="166" y2="168"/>
+    <line x1="102" y1="150" x2="154" y2="150"/>
+    <line x1="111" y1="136" x2="145" y2="136"/>
+    <line x1="118" y1="124" x2="138" y2="124"/>
+  </g>
+
+  <!-- extracted centerline running down the middle, glowing brightest in the foreground -->
+  <line x1="128" y1="222" x2="128" y2="108" stroke="url(#cl06)" stroke-width="6" stroke-linecap="round"/>
+  <line x1="128" y1="222" x2="128" y2="108" stroke="#6ee7b7" stroke-width="14" stroke-linecap="round" opacity="0.2"/>
+
+  <!-- vanishing-point dot -->
+  <circle cx="128" cy="108" r="4" fill="#6ee7b7"/>
+  <circle cx="128" cy="108" r="9" fill="none" stroke="#6ee7b7" stroke-opacity="0.6" stroke-width="2"/>
+</svg>

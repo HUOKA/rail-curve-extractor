@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Candidate 05 — Monogram "R" with a rail thread running through it.
+  Brand-flavored: looks decent in tiny sizes (favicon, dock badge),
+  works on both light and dark backgrounds.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg05" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f1729"/>
+      <stop offset="1" stop-color="#0a0f1d"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="url(#bg05)"/>
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="none" stroke="#34d399" stroke-opacity="0.25" stroke-width="2"/>
+
+  <!-- The letter R in a heavy geometric weight -->
+  <g fill="none" stroke="#e6ebf5" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <!-- left stem -->
+    <line x1="80" y1="56" x2="80" y2="200"/>
+    <!-- top arc -->
+    <path d="M 80 56 H 144 a 36 36 0 1 1 0 72 H 80"/>
+    <!-- diagonal leg -->
+    <line x1="120" y1="128" x2="172" y2="200"/>
+  </g>
+
+  <!-- centerline thread cutting horizontally through the R -->
+  <line x1="32" y1="158" x2="224" y2="158"
+        stroke="#34d399" stroke-width="6" stroke-linecap="round"/>
+  <line x1="32" y1="158" x2="224" y2="158"
+        stroke="#6ee7b7" stroke-width="14" stroke-linecap="round" opacity="0.18"/>
+
+  <!-- end stop dots on the line -->
+  <circle cx="32" cy="158" r="5" fill="#34d399"/>
+  <circle cx="224" cy="158" r="5" fill="#34d399"/>
+</svg>

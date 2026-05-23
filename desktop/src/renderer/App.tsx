@@ -37,6 +37,7 @@ import { Stepper, StepItem, StepState } from "./components/Stepper";
 import { ThemeSwitch } from "./components/ThemeSwitch";
 import { AnimatedNumber } from "./components/AnimatedNumber";
 import { useTheme } from "./lib/theme";
+import appIconUrl from "./assets/app-icon.svg";
 
 type FormState = {
   domPath: string;
@@ -535,16 +536,20 @@ function HardwarePill({ devices }: { devices: SystemDevices }) {
 
 function Logo() {
   return (
-    <div className="relative flex items-center justify-center w-8 h-8 rounded-md bg-[var(--color-accent-soft)] text-[var(--color-accent)] border border-[var(--color-accent)]/30">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-        <path d="M5 21 12 3l7 18" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M8.5 13h7" strokeLinecap="round" />
-      </svg>
+    <div className="relative flex items-center justify-center w-9 h-9 rounded-lg overflow-hidden border border-[var(--color-border)] bg-[var(--color-canvas)] shrink-0">
+      <img
+        src={appIconUrl}
+        alt="Rail Curve Extractor"
+        width={36}
+        height={36}
+        className="block"
+        draggable={false}
+      />
       <div
-        className="absolute inset-0 rounded-md"
+        className="absolute inset-0 rounded-lg pointer-events-none"
         style={{
           boxShadow: "0 0 14px var(--color-scan-glow)",
-          opacity: 0.35
+          opacity: 0.28
         }}
       />
     </div>
