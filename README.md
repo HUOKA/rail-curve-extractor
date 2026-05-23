@@ -22,14 +22,13 @@
 - **算法核心**：纯 Python 包 `rail_curve_extractor`，配套 `scripts/` 下的命令行脚本。任何流水线步骤都可以独立跑。
 - **桌面前端**：`desktop/` 下的 Electron + React 应用，把流水线封成一屏式工作台，**不会写命令行的人也能用**。
 
-```text
-┌─ 无人机 DOM ────────────────────────────────────────────────┐
-│   GeoTIFF (含 CRS) ─┬─► 语义分割 (DeepLabv3+ ResNet50)       │
-│                     ├─► 钢轨候选 + 轨距配对                  │
-│                     ├─► 拓扑后处理 (strict-auto)             │
-│                     ├─► DSM / LAS 补 Z                       │
-│                     └─► centerline_2d.shp + centerline_3d.shp│
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    A[无人机 DOM<br/>GeoTIFF + CRS] --> B[语义分割<br/>DeepLabv3+ ResNet50]
+    B --> C[钢轨候选<br/>+ 轨距配对]
+    C --> D[拓扑后处理<br/>strict-auto]
+    D --> E[DSM / LAS<br/>补 Z]
+    E --> F[centerline_2d.shp<br/>centerline_3d.shp]
 ```
 
 ## 截图
