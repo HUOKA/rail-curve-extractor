@@ -35,6 +35,7 @@ DEFAULT_EPSG = 32651
 
 ARCHIVE_ROOT = Path("output/_archive_superseded_20260521_v20z_baseline/output_root")
 DEFAULT_DEEPLAB_MODEL_CANDIDATES = [
+    Path("models/rail_seg_deeplab_resnet50_native_v1/rail_semantic_deeplab_resnet50.pt"),
     Path("output/rail_seg_deeplab_resnet50_native_v1/rail_semantic_deeplab_resnet50.pt"),
     ARCHIVE_ROOT / "rail_seg_deeplab_resnet50_native_v1" / "rail_semantic_deeplab_resnet50.pt",
 ]
