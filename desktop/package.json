@@ -1,6 +1,6 @@
 {
   "name": "rail-curve-extractor-desktop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",
@@ -10,18 +10,19 @@
     "start": "npm run build && electron ."
   },
   "dependencies": {
-    "@fluentui/react-components": "^9.73.8",
-    "@fluentui/react-icons": "^2.0.316",
-    "@vitejs/plugin-react": "^5.1.2",
+    "clsx": "^2.1.1",
     "electron": "^39.2.7",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3",
-    "typescript": "^5.9.3",
-    "vite": "^7.3.0"
+    "react-dom": "^19.2.3"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.10",
     "@types/node": "^24.10.2",
     "@types/react": "^19.2.7",
-    "@types/react-dom": "^19.2.3"
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.2",
+    "tailwindcss": "^4.1.10",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.0"
   }
 }

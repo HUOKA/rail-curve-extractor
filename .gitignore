@@ -42,3 +42,5 @@ desktop/node_modules/
 desktop/dist/
 desktop/dist-electron/
 *.spec.bak
+# Local snapshot of the previous Fluent UI renderer; the real history is in git.
+desktop/src/renderer.legacy/
