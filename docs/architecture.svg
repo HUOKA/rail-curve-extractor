@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Pipeline architecture diagram for the README hero.
+  Designed to read well on both GitHub light and dark themes:
+  background is transparent, text uses high-contrast slate gray,
+  accent color matches the app icon (teal/emerald).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 220" width="1280" height="220">
+  <defs>
+    <linearGradient id="nodeFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f6faf8"/>
+    </linearGradient>
+    <linearGradient id="accentFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#34d399"/>
+      <stop offset="1" stop-color="#10b981"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14"
+            orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#0f766e"/>
+    </marker>
+
+    <style>
+      .node-rect {
+        fill: url(#nodeFill);
+        stroke: #99c8b8;
+        stroke-width: 1.5;
+        rx: 12;
+      }
+      .accent-rect {
+        fill: url(#accentFill);
+        stroke: #0f766e;
+        stroke-width: 1.5;
+        rx: 12;
+      }
+      .title {
+        font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        fill: #0f172a;
+        text-anchor: middle;
+      }
+      .title-on-accent {
+        font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        fill: #03241b;
+        text-anchor: middle;
+      }
+      .sub {
+        font-family: ui-monospace, "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+        font-size: 11px;
+        fill: #64748b;
+        text-anchor: middle;
+      }
+      .sub-on-accent {
+        font-family: ui-monospace, "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+        font-size: 11px;
+        fill: #054032;
+        text-anchor: middle;
+      }
+      .connector {
+        stroke: #0f766e;
+        stroke-width: 2;
+        fill: none;
+      }
+    </style>
+  </defs>
+
+  <!-- ───────────── Nodes ───────────── -->
+  <!-- Six boxes spaced across 1280px width with 16px gaps. -->
+  <!-- Box width 184, height 88, vertical center y=110, top y=66, bottom y=154 -->
+
+  <!-- 1. DOM input -->
+  <g transform="translate(20, 66)">
+    <rect class="node-rect" width="184" height="88"/>
+    <text class="title" x="92" y="42">DOM 影像</text>
+    <text class="sub" x="92" y="62">GeoTIFF · CRS</text>
+  </g>
+
+  <!-- 2. Semantic segmentation -->
+  <g transform="translate(228, 66)">
+    <rect class="node-rect" width="184" height="88"/>
+    <text class="title" x="92" y="42">语义分割</text>
+    <text class="sub" x="92" y="62">DeepLabv3+ R50</text>
+  </g>
+
+  <!-- 3. Rail candidate + gauge pairing -->
+  <g transform="translate(436, 66)">
+    <rect class="node-rect" width="184" height="88"/>
+    <text class="title" x="92" y="42">钢轨候选</text>
+    <text class="sub" x="92" y="62">轨距配对</text>
+  </g>
+
+  <!-- 4. Topology post-processing -->
+  <g transform="translate(644, 66)">
+    <rect class="node-rect" width="184" height="88"/>
+    <text class="title" x="92" y="42">拓扑后处理</text>
+    <text class="sub" x="92" y="62">strict-auto</text>
+  </g>
+
+  <!-- 5. DSM / LAS Z -->
+  <g transform="translate(852, 66)">
+    <rect class="node-rect" width="184" height="88"/>
+    <text class="title" x="92" y="42">DSM / LAS</text>
+    <text class="sub" x="92" y="62">补 Z 高程</text>
+  </g>
+
+  <!-- 6. Output (accent) -->
+  <g transform="translate(1060, 66)">
+    <rect class="accent-rect" width="200" height="88"/>
+    <text class="title-on-accent" x="100" y="42">2D / 3D 中心线</text>
+    <text class="sub-on-accent" x="100" y="62">Shapefile</text>
+  </g>
+
+  <!-- ───────────── Connectors ───────────── -->
+  <!-- Each connector goes from box right edge to next box left edge, vertically centered at y=110 -->
+  <line class="connector" x1="206" y1="110" x2="226" y2="110" marker-end="url(#arrow)"/>
+  <line class="connector" x1="414" y1="110" x2="434" y2="110" marker-end="url(#arrow)"/>
+  <line class="connector" x1="622" y1="110" x2="642" y2="110" marker-end="url(#arrow)"/>
+  <line class="connector" x1="830" y1="110" x2="850" y2="110" marker-end="url(#arrow)"/>
+  <line class="connector" x1="1038" y1="110" x2="1058" y2="110" marker-end="url(#arrow)"/>
+</svg>
