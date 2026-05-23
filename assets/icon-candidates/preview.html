@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Icon candidates · Rail Curve Extractor</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 32px 40px 64px;
+        font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+        color: #e6ebf5;
+        background: #0a0f1d;
+        transition: background 200ms ease, color 200ms ease;
+      }
+      body[data-bg="light"] {
+        background: #f6f7fb;
+        color: #0f172a;
+      }
+      body[data-bg="taskbar"] {
+        background: #1f1f1f;
+        color: #e6ebf5;
+      }
+      body[data-bg="explorer"] {
+        background: #ffffff;
+        color: #0f172a;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 36px;
+        gap: 24px;
+        flex-wrap: wrap;
+      }
+      h1 {
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        margin: 0;
+      }
+      .controls {
+        display: inline-flex;
+        gap: 6px;
+        padding: 4px;
+        border-radius: 999px;
+        background: rgba(127, 127, 127, 0.12);
+      }
+      .controls button {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        font-size: 12px;
+        padding: 6px 14px;
+        border-radius: 999px;
+        cursor: pointer;
+        opacity: 0.7;
+        transition: opacity 160ms ease, background 160ms ease;
+      }
+      .controls button[data-active="true"] {
+        background: rgba(127, 127, 127, 0.2);
+        opacity: 1;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+        gap: 28px;
+      }
+      .card {
+        border-radius: 18px;
+        padding: 22px 22px 18px;
+        background: rgba(127, 127, 127, 0.06);
+        border: 1px solid rgba(127, 127, 127, 0.18);
+      }
+      .card h2 {
+        margin: 0 0 4px 0;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0;
+      }
+      .card .filename {
+        font-family: ui-monospace, "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+        font-size: 11px;
+        opacity: 0.6;
+        margin-bottom: 18px;
+      }
+      .sizes {
+        display: flex;
+        align-items: flex-end;
+        gap: 22px;
+      }
+      .size {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+      .size .swatch {
+        display: grid;
+        place-items: center;
+        border-radius: 12px;
+        background: rgba(127, 127, 127, 0.08);
+        border: 1px solid rgba(127, 127, 127, 0.14);
+      }
+      .size .swatch.big {
+        width: 132px;
+        height: 132px;
+      }
+      .size .swatch.med {
+        width: 72px;
+        height: 72px;
+      }
+      .size .swatch.sm {
+        width: 40px;
+        height: 40px;
+      }
+      .size .swatch.tiny {
+        width: 24px;
+        height: 24px;
+      }
+      .size .swatch img {
+        width: 80%;
+        height: 80%;
+      }
+      .size .label {
+        font-family: ui-monospace, "JetBrains Mono", monospace;
+        font-size: 10px;
+        opacity: 0.6;
+      }
+      footer {
+        margin-top: 32px;
+        font-size: 12px;
+        opacity: 0.6;
+      }
+      footer code {
+        font-family: ui-monospace, "JetBrains Mono", monospace;
+        background: rgba(127, 127, 127, 0.12);
+        padding: 1px 6px;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body data-bg="dark">
+    <header>
+      <div>
+        <h1>Rail Curve Extractor — 应用图标候选</h1>
+        <div style="opacity: 0.6; font-size: 12px; margin-top: 4px">
+          点击右上角切换不同背景，看看在哪个场景下最舒服
+        </div>
+      </div>
+      <div class="controls" id="bg-controls">
+        <button data-bg="dark" data-active="true">深色画布</button>
+        <button data-bg="light">浅色画布</button>
+        <button data-bg="taskbar">Windows 任务栏</button>
+        <button data-bg="explorer">资源管理器</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <article class="card">
+        <h2>01 · 俯视双轨 + 中心线</h2>
+        <div class="filename">01-overhead-rails.svg</div>
+        <div class="sizes">
+          <div class="size">
+            <div class="swatch big"><img src="01-overhead-rails.svg" alt="" /></div>
+            <div class="label">128px</div>
+          </div>
+          <div class="size">
+            <div class="swatch med"><img src="01-overhead-rails.svg" alt="" /></div>
+            <div class="label">64px</div>
+          </div>
+          <div class="size">
+            <div class="swatch sm"><img src="01-overhead-rails.svg" alt="" /></div>
+            <div class="label">32px</div>
+          </div>
+          <div class="size">
+            <div class="swatch tiny"><img src="01-overhead-rails.svg" alt="" /></div>
+            <div class="label">16px</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>02 · 钢轨断面 + 提取轴</h2>
+        <div class="filename">02-rail-cross-section.svg</div>
+        <div class="sizes">
+          <div class="size">
+            <div class="swatch big"><img src="02-rail-cross-section.svg" alt="" /></div>
+            <div class="label">128px</div>
+          </div>
+          <div class="size">
+            <div class="swatch med"><img src="02-rail-cross-section.svg" alt="" /></div>
+            <div class="label">64px</div>
+          </div>
+          <div class="size">
+            <div class="swatch sm"><img src="02-rail-cross-section.svg" alt="" /></div>
+            <div class="label">32px</div>
+          </div>
+          <div class="size">
+            <div class="swatch tiny"><img src="02-rail-cross-section.svg" alt="" /></div>
+            <div class="label">16px</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>03 · 贝塞尔曲线 + 控制点</h2>
+        <div class="filename">03-bezier-curve.svg</div>
+        <div class="sizes">
+          <div class="size">
+            <div class="swatch big"><img src="03-bezier-curve.svg" alt="" /></div>
+            <div class="label">128px</div>
+          </div>
+          <div class="size">
+            <div class="swatch med"><img src="03-bezier-curve.svg" alt="" /></div>
+            <div class="label">64px</div>
+          </div>
+          <div class="size">
+            <div class="swatch sm"><img src="03-bezier-curve.svg" alt="" /></div>
+            <div class="label">32px</div>
+          </div>
+          <div class="size">
+            <div class="swatch tiny"><img src="03-bezier-curve.svg" alt="" /></div>
+            <div class="label">16px</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>04 · 像素到曲线（DOM → 中心线）</h2>
+        <div class="filename">04-pixels-to-curve.svg</div>
+        <div class="sizes">
+          <div class="size">
+            <div class="swatch big"><img src="04-pixels-to-curve.svg" alt="" /></div>
+            <div class="label">128px</div>
+          </div>
+          <div class="size">
+            <div class="swatch med"><img src="04-pixels-to-curve.svg" alt="" /></div>
+            <div class="label">64px</div>
+          </div>
+          <div class="size">
+            <div class="swatch sm"><img src="04-pixels-to-curve.svg" alt="" /></div>
+            <div class="label">32px</div>
+          </div>
+          <div class="size">
+            <div class="swatch tiny"><img src="04-pixels-to-curve.svg" alt="" /></div>
+            <div class="label">16px</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>05 · 字母标 R + 穿过的轨线</h2>
+        <div class="filename">05-monogram-r.svg</div>
+        <div class="sizes">
+          <div class="size">
+            <div class="swatch big"><img src="05-monogram-r.svg" alt="" /></div>
+            <div class="label">128px</div>
+          </div>
+          <div class="size">
+            <div class="swatch med"><img src="05-monogram-r.svg" alt="" /></div>
+            <div class="label">64px</div>
+          </div>
+          <div class="size">
+            <div class="swatch sm"><img src="05-monogram-r.svg" alt="" /></div>
+            <div class="label">32px</div>
+          </div>
+          <div class="size">
+            <div class="swatch tiny"><img src="05-monogram-r.svg" alt="" /></div>
+            <div class="label">16px</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>06 · 透视轨道 + 消失点</h2>
+        <div class="filename">06-perspective-rails.svg</div>
+        <div class="sizes">
+          <div class="size">
+            <div class="swatch big"><img src="06-perspective-rails.svg" alt="" /></div>
+            <div class="label">128px</div>
+          </div>
+          <div class="size">
+            <div class="swatch med"><img src="06-perspective-rails.svg" alt="" /></div>
+            <div class="label">64px</div>
+          </div>
+          <div class="size">
+            <div class="swatch sm"><img src="06-perspective-rails.svg" alt="" /></div>
+            <div class="label">32px</div>
+          </div>
+          <div class="size">
+            <div class="swatch tiny"><img src="06-perspective-rails.svg" alt="" /></div>
+            <div class="label">16px</div>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <footer>
+      挑好之后告诉我编号（01-06），我会做以下事情：<br />
+      1. 把那张 SVG 拷到 <code>desktop/src/renderer/assets/app-icon.svg</code> 用作顶栏 logo<br />
+      2. 用 sharp 生成 <code>assets/app_icon.png</code>（1024 / 512 / 256 / 64 / 32 / 16）和 <code>assets/app_icon.ico</code>（含全尺寸的 Windows 多分辨率图标）<br />
+      3. 把 Electron BrowserWindow 的 icon 选项接上，让任务栏和窗口左上角跟着变
+    </footer>
+
+    <script>
+      const buttons = document.querySelectorAll("#bg-controls button");
+      buttons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          buttons.forEach((b) => b.setAttribute("data-active", "false"));
+          btn.setAttribute("data-active", "true");
+          document.body.dataset.bg = btn.dataset.bg;
+        });
+      });
+    </script>
+  </body>
+</html>

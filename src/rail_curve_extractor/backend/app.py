@@ -5,6 +5,8 @@ import atexit
 import json
 import os
 from pathlib import Path
+import platform
+import shutil
 import subprocess
 import sys
 import time
@@ -91,6 +93,10 @@ class DomPipelineStartRequest(BaseModel):
     epsg: int = 32651
 
 
+class RasterProbeRequest(BaseModel):
+    path: str
+
+
 @app.middleware("http")
 async def require_local_token(request: Request, call_next: Any) -> JSONResponse:
     expected_token = os.environ.get("RAIL_CURVE_BACKEND_TOKEN", "")
@@ -108,6 +114,232 @@ def health() -> dict[str, Any]:
         "service": "rail-curve-extractor-backend",
         "python": sys.version.split()[0],
     }
+
+
+@app.post(f"{API_PREFIX}/raster/probe")
+def raster_probe(request: RasterProbeRequest) -> dict[str, Any]:
+    """Read CRS / size / bounds from a raster file (e.g. DOM or DSM).
+
+    Used by the desktop UI to auto-detect EPSG instead of asking the user to type it.
+    Pure read-only metadata; does not load pixel data.
+    """
+    raster_path = _existing_path(request.path, "栅格文件")
+    try:
+        import rasterio
+    except ImportError as exc:  # pragma: no cover - rasterio is a hard dep
+        raise HTTPException(status_code=500, detail=f"rasterio 不可用：{exc}") from exc
+
+    try:
+        with rasterio.open(str(raster_path)) as dataset:
+            crs = dataset.crs
+            epsg = crs.to_epsg() if crs else None
+            crs_name = crs.to_string() if crs else None
+            bounds = dataset.bounds
+            return {
+                "path": str(raster_path),
+                "epsg": int(epsg) if epsg else None,
+                "crs": crs_name,
+                "width": int(dataset.width),
+                "height": int(dataset.height),
+                "band_count": int(dataset.count),
+                "driver": dataset.driver,
+                "bounds": {
+                    "left": float(bounds.left),
+                    "bottom": float(bounds.bottom),
+                    "right": float(bounds.right),
+                    "top": float(bounds.top),
+                },
+                "pixel_size": [
+                    float(abs(dataset.transform.a)),
+                    float(abs(dataset.transform.e)),
+                ],
+            }
+    except rasterio.RasterioIOError as exc:  # type: ignore[attr-defined]
+        raise HTTPException(status_code=400, detail=f"无法读取栅格：{exc}") from exc
+
+
+@app.get(f"{API_PREFIX}/system/devices")
+def system_devices() -> dict[str, Any]:
+    """Probe local CPU / GPU and PyTorch CUDA availability for the desktop UI."""
+    return {
+        "cpu": _probe_cpu(),
+        "cuda": _probe_cuda(),
+        "torch": _probe_torch(),
+    }
+
+
+def _probe_cpu() -> dict[str, Any]:
+    """Best-effort CPU description across Windows / Linux / macOS."""
+    info: dict[str, Any] = {
+        "name": platform.processor() or platform.machine() or "CPU",
+        "arch": platform.machine(),
+        "logical_cores": os.cpu_count(),
+        "physical_cores": None,
+        "platform": f"{platform.system()} {platform.release()}",
+    }
+
+    # Windows: WMIC is deprecated but still present; fall back to PowerShell CIM.
+    if platform.system() == "Windows":
+        for cmd in (
+            ["wmic", "cpu", "get", "Name,NumberOfCores,NumberOfLogicalProcessors", "/format:list"],
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "Get-CimInstance Win32_Processor | "
+                "Select-Object Name,NumberOfCores,NumberOfLogicalProcessors | Format-List",
+            ],
+        ):
+            text = _run_capture(cmd, timeout=5)
+            if not text:
+                continue
+            parsed = _parse_kv_block(text)
+            if parsed.get("Name"):
+                info["name"] = parsed["Name"].strip()
+                if parsed.get("NumberOfCores", "").isdigit():
+                    info["physical_cores"] = int(parsed["NumberOfCores"])
+                if parsed.get("NumberOfLogicalProcessors", "").isdigit():
+                    info["logical_cores"] = int(parsed["NumberOfLogicalProcessors"])
+                break
+    elif platform.system() == "Linux":
+        try:
+            with open("/proc/cpuinfo", encoding="utf-8") as handle:
+                for line in handle:
+                    if line.startswith("model name"):
+                        info["name"] = line.split(":", 1)[1].strip()
+                        break
+        except OSError:
+            pass
+    elif platform.system() == "Darwin":
+        text = _run_capture(["sysctl", "-n", "machdep.cpu.brand_string"], timeout=2)
+        if text:
+            info["name"] = text.strip()
+
+    return info
+
+
+def _probe_cuda() -> dict[str, Any]:
+    """Detect NVIDIA GPUs via nvidia-smi. Returns available=False if no NVIDIA driver."""
+    nvidia_smi = shutil.which("nvidia-smi")
+    if not nvidia_smi:
+        return {
+            "available": False,
+            "reason": "missing-driver",
+            "message": "未检测到 NVIDIA 驱动（nvidia-smi 不可用）",
+            "gpus": [],
+        }
+
+    output = _run_capture(
+        [
+            nvidia_smi,
+            "--query-gpu=name,memory.total,driver_version,compute_cap",
+            "--format=csv,noheader,nounits",
+        ],
+        timeout=5,
+    )
+    if not output:
+        return {
+            "available": False,
+            "reason": "smi-failed",
+            "message": "nvidia-smi 执行失败",
+            "gpus": [],
+        }
+
+    gpus = []
+    for line in output.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = [piece.strip() for piece in line.split(",")]
+        if len(parts) < 2:
+            continue
+        try:
+            mem_total_mib = int(parts[1])
+        except ValueError:
+            mem_total_mib = None
+        gpus.append(
+            {
+                "name": parts[0],
+                "memory_total_mib": mem_total_mib,
+                "driver_version": parts[2] if len(parts) > 2 else None,
+                "compute_capability": parts[3] if len(parts) > 3 else None,
+            }
+        )
+
+    return {
+        "available": len(gpus) > 0,
+        "reason": None if gpus else "no-device",
+        "message": None,
+        "gpus": gpus,
+    }
+
+
+def _probe_torch() -> dict[str, Any]:
+    """Probe PyTorch availability and CUDA build."""
+    try:
+        import torch  # type: ignore
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "installed": False,
+            "version": None,
+            "cuda_build": None,
+            "cuda_runtime_available": False,
+            "device_count": 0,
+            "message": f"PyTorch 未安装：{exc}",
+        }
+
+    cuda_available = False
+    device_count = 0
+    try:
+        cuda_available = bool(torch.cuda.is_available())
+        if cuda_available:
+            device_count = int(torch.cuda.device_count())
+    except Exception:  # noqa: BLE001
+        cuda_available = False
+        device_count = 0
+
+    return {
+        "installed": True,
+        "version": getattr(torch, "__version__", None),
+        "cuda_build": getattr(torch.version, "cuda", None),  # type: ignore[attr-defined]
+        "cuda_runtime_available": cuda_available,
+        "device_count": device_count,
+        "message": None,
+    }
+
+
+def _run_capture(cmd: list[str], timeout: float) -> str:
+    """Run a command capturing stdout; return '' on any failure."""
+    try:
+        completed = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return ""
+    if completed.returncode != 0:
+        return completed.stdout or ""
+    return completed.stdout or ""
+
+
+def _parse_kv_block(text: str) -> dict[str, str]:
+    """Parse `Key=Value` or `Key : Value` lines into a dict (last wins)."""
+    parsed: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if "=" in line:
+            key, _, value = line.partition("=")
+        elif ":" in line:
+            key, _, value = line.partition(":")
+        else:
+            continue
+        parsed[key.strip()] = value.strip()
+    return parsed
 
 
 @app.get("/open3d-local-ice")

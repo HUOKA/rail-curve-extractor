@@ -1,4 +1,4 @@
-import { BrowserWindow, app, dialog, ipcMain, session } from "electron";
+import { BrowserWindow, app, clipboard, dialog, ipcMain, nativeTheme, session, shell } from "electron";
 import { ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import net from "node:net";
@@ -9,8 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..", "..");
 const desktopRoot = path.resolve(projectRoot, "desktop");
-const MIN_WINDOW_WIDTH = 1480;
-const MIN_WINDOW_HEIGHT = 900;
+
 const OPEN3D_WEBRTC_URL_PATTERNS = [
   "http://127.0.0.1:8888/*",
   "http://localhost:8888/*",
@@ -43,8 +42,7 @@ async function pickPort(): Promise<number> {
 }
 
 function pythonExecutable(): string {
-  const venvPython = path.join(projectRoot, ".venv", "Scripts", "python.exe");
-  return venvPython;
+  return path.join(projectRoot, ".venv", "Scripts", "python.exe");
 }
 
 function startBackend(): void {
@@ -108,25 +106,21 @@ async function configureLocalViewerSession(localBackendPort: number): Promise<vo
 }
 
 function createWindow(): void {
+  const iconPath = path.join(projectRoot, "assets", "app_icon.ico");
   const window = new BrowserWindow({
-    width: 1560,
-    height: 940,
-    minWidth: MIN_WINDOW_WIDTH,
-    minHeight: MIN_WINDOW_HEIGHT,
+    width: 1320,
+    height: 860,
+    minWidth: 1120,
+    minHeight: 720,
     useContentSize: true,
     title: "Rail Curve Extractor",
-    backgroundColor: "#f3f6f8",
+    icon: iconPath,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#0a0f1d" : "#f6f7fb",
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false
-    }
-  });
-  window.setMinimumSize(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT);
-  window.on("resize", () => {
-    const [width, height] = window.getSize();
-    if (width < MIN_WINDOW_WIDTH || height < MIN_WINDOW_HEIGHT) {
-      window.setSize(Math.max(width, MIN_WINDOW_WIDTH), Math.max(height, MIN_WINDOW_HEIGHT));
     }
   });
 
@@ -138,26 +132,6 @@ ipcMain.handle("backend-config", () => ({
   baseUrl: `http://127.0.0.1:${backendPort}`,
   token: backendToken
 }));
-
-ipcMain.handle("dialog:open-point-cloud", async () => {
-  const result = await dialog.showOpenDialog({
-    title: "选择点云文件",
-    properties: ["openFile"],
-    filters: [
-      { name: "Point Clouds", extensions: ["las", "laz", "csv", "txt", "xyz", "npy"] },
-      { name: "All Files", extensions: ["*"] }
-    ]
-  });
-  return result.canceled ? null : result.filePaths[0];
-});
-
-ipcMain.handle("dialog:open-point-cloud-folder", async () => {
-  const result = await dialog.showOpenDialog({
-    title: "选择 DJI Terra 项目文件夹或点云目录",
-    properties: ["openDirectory"]
-  });
-  return result.canceled ? null : result.filePaths[0];
-});
 
 ipcMain.handle("dialog:open-dom", async () => {
   const result = await dialog.showOpenDialog({
@@ -209,6 +183,22 @@ ipcMain.handle("dialog:select-output-dir", async () => {
     properties: ["openDirectory", "createDirectory"]
   });
   return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle("shell:reveal", (_event, target: string) => {
+  if (!target) return false;
+  shell.showItemInFolder(target);
+  return true;
+});
+
+ipcMain.handle("shell:open-path", async (_event, target: string) => {
+  if (!target) return "";
+  return await shell.openPath(target);
+});
+
+ipcMain.handle("clipboard:write", (_event, text: string) => {
+  clipboard.writeText(text ?? "");
+  return true;
 });
 
 app.whenReady().then(async () => {

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Candidate 03 — Bezier curve with control points.
+  Reads as "vector centerline extraction": a clean curve with handles,
+  hint at GIS / CAD heritage. No literal rails, more abstract.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg03" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f1729"/>
+      <stop offset="1" stop-color="#0a0f1d"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="url(#bg03)"/>
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="none" stroke="#34d399" stroke-opacity="0.25" stroke-width="2"/>
+
+  <!-- subtle grid -->
+  <g stroke="#243152" stroke-width="1" opacity="0.6">
+    <line x1="40" y1="80" x2="216" y2="80"/>
+    <line x1="40" y1="128" x2="216" y2="128"/>
+    <line x1="40" y1="176" x2="216" y2="176"/>
+    <line x1="80" y1="40" x2="80" y2="216"/>
+    <line x1="128" y1="40" x2="128" y2="216"/>
+    <line x1="176" y1="40" x2="176" y2="216"/>
+  </g>
+
+  <!-- guide handles (dashed) -->
+  <g stroke="#5d6884" stroke-width="2" stroke-dasharray="4 4">
+    <line x1="56" y1="184" x2="100" y2="80"/>
+    <line x1="200" y1="72" x2="156" y2="176"/>
+  </g>
+
+  <!-- the curve -->
+  <path d="M 56 184 C 100 80 156 176 200 72"
+        fill="none" stroke="#34d399" stroke-width="6" stroke-linecap="round"/>
+  <!-- glow -->
+  <path d="M 56 184 C 100 80 156 176 200 72"
+        fill="none" stroke="#6ee7b7" stroke-width="14" stroke-linecap="round" opacity="0.18"/>
+
+  <!-- anchor points (filled) -->
+  <g fill="#0a0f1d" stroke="#34d399" stroke-width="3">
+    <rect x="49" y="177" width="14" height="14" rx="2"/>
+    <rect x="193" y="65" width="14" height="14" rx="2"/>
+  </g>
+  <!-- control points (open) -->
+  <g fill="#0a0f1d" stroke="#6ee7b7" stroke-width="2">
+    <circle cx="100" cy="80" r="6"/>
+    <circle cx="156" cy="176" r="6"/>
+  </g>
+</svg>
