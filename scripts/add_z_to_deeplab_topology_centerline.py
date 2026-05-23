@@ -13,14 +13,14 @@ import numpy as np
 
 DEFAULT_INPUT = (
     Path("output")
-    / "raw_dom_roi_fullpass_v1"
-    / "deeplab_topology_centerline_review_v19_crossover_tangent"
-    / "deeplab_topology_centerline_network.geojson"
+    / "dom_centerline_strict_auto_v1"
+    / "global_centerline_review_tangent_occlusion"
+    / "global_centerline_2d.geojson"
 )
 DEFAULT_OUTPUT_DIR = (
     Path("output")
-    / "raw_dom_roi_fullpass_v1"
-    / "deeplab_topology_centerline_review_v20_z"
+    / "dom_centerline_strict_auto_v1"
+    / "global_centerline_review_tangent_occlusion_z"
 )
 DEFAULT_DSM = Path("D:/") / "\u6b63\u5c04" / "lidars" / "terra_dsm" / "dsm.tif"
 DEFAULT_LAS_DIR = Path("D:/") / "\u6b63\u5c04" / "lidars" / "terra_las"
@@ -57,7 +57,7 @@ class ZLine:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Add smoothed Z values to the accepted v19 DeepLab topology centerline.")
+    parser = argparse.ArgumentParser(description="Add smoothed LAS/DSM Z values to a 2D centerline.")
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--dsm", type=Path, default=DEFAULT_DSM)
@@ -706,7 +706,7 @@ def write_review(path: Path, summary: dict[str, Any]) -> None:
         f"- Base 2D centerline: `{summary['input']}`",
         f"- Output 3D shp: `{summary['outputs'].get('network_z_shp', '')}`",
         f"- Selected source: `{summary['selected_source']}`",
-        f"- XY policy: v19 geometry is only densified along existing segments; topology and plan-view alignment are not rebuilt.",
+        "- XY policy: input 2D geometry is only densified along existing segments; topology and plan-view alignment are not rebuilt.",
         f"- LAS coverage: {summary['source_comparison']['las']['valid_ratio']:.4f}",
         f"- DSM coverage: {summary['source_comparison']['dsm']['valid_ratio']:.4f}",
         "",
@@ -790,7 +790,7 @@ def build_summary(
         "las_dir": str(args.las_dir),
         "feature_count": len(features),
         "dense_vertex_count": int(sum(line.coords.shape[0] for line in dense_lines)),
-        "xy_policy": "Accepted v19 XY is preserved as geometry; output is densified along source segments only.",
+        "xy_policy": "Input 2D XY is preserved as geometry; output is densified along source segments only.",
         "spacing_m": args.spacing_m,
         "rail_offset_m": args.rail_offset_m,
         "las_radius_m": args.las_radius_m,

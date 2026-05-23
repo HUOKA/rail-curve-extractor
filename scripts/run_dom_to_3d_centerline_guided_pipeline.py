@@ -716,7 +716,7 @@ def build_plan(args: argparse.Namespace, *, repo_root: Path, out_dir: Path, stag
         "las_dir": str(args.las_dir.expanduser()),
         "tile_index": str(plan_tile_index),
         "deeplab_model": str(args.deeplab_model.expanduser()),
-        "raw_root": str(args.raw_root.expanduser()),
+        "raw_root": None if args.profile == PROFILE_STRICT_AUTO else str(args.raw_root.expanduser()),
         "out_dir": str(out_dir),
         "epsg": args.epsg,
         "force": bool(args.force),
@@ -819,7 +819,7 @@ def build_summary(
             "las_dir": str(args.las_dir.expanduser()),
             "tile_index": str(summary_tile_index),
             "deeplab_model": str(args.deeplab_model.expanduser()),
-            "raw_root": str(args.raw_root.expanduser()),
+            "raw_root": None if args.profile == PROFILE_STRICT_AUTO else str(args.raw_root.expanduser()),
         },
         "stages": [
             {
@@ -843,7 +843,7 @@ def build_summary(
         },
         "shape_2d": shape_2d,
         "shape_3d": shape_3d,
-        "accepted_v20_z_baseline": baseline_info,
+        "reference_z_baseline": baseline_info,
         "baseline_comparison": compare_shape_info(shape_3d, baseline_info),
         "z_summary": read_json_if_exists(centerline_3d_dir / "summary.json"),
     }

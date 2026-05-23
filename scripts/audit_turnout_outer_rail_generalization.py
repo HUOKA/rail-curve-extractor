@@ -44,6 +44,10 @@ SUPPORT_COLORS = {
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Audit whether turnout outer-rail correction generalizes over all upstream candidates.")
     parser.add_argument("--turnouts", type=Path, default=DEFAULT_TURNOUTS)
+    parser.add_argument("--mainline", type=Path, default=None)
+    parser.add_argument("--tile-index", type=Path, default=None)
+    parser.add_argument("--probabilities-dir", type=Path, default=None)
+    parser.add_argument("--dom", type=Path, default=None)
     parser.add_argument("--prototype", type=Path, default=DEFAULT_PROTOTYPE)
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--python", default=sys.executable)
@@ -67,7 +71,18 @@ def main() -> int:
     static_scan = scan_static_risks(args.prototype)
     if not args.skip_run:
         for branch_id in branch_ids:
-            run_branch(args.python, args.prototype, branch_id, out_dir / branch_id, logs_dir)
+            run_branch(
+                args.python,
+                args.prototype,
+                branch_id,
+                out_dir / branch_id,
+                logs_dir,
+                turnouts=args.turnouts,
+                mainline=args.mainline,
+                tile_index=args.tile_index,
+                probabilities_dir=args.probabilities_dir,
+                dom=args.dom,
+            )
 
     summaries = [load_branch_summary(out_dir, branch_id) for branch_id in branch_ids]
     samples_by_branch = {branch_id: load_samples(out_dir / branch_id / f"{branch_id}_outer_rail_samples.csv") for branch_id in branch_ids}
@@ -113,6 +128,10 @@ def main() -> int:
     audit_summary = {
         "mode": "turnout_outer_rail_generalization_audit",
         "turnouts": str(args.turnouts.resolve()),
+        "mainline": str(args.mainline.resolve()) if args.mainline else None,
+        "tile_index": str(args.tile_index.resolve()) if args.tile_index else None,
+        "probabilities_dir": str(args.probabilities_dir.resolve()) if args.probabilities_dir else None,
+        "dom": str(args.dom.resolve()) if args.dom else None,
         "prototype": str(args.prototype.resolve()),
         "branch_ids": branch_ids,
         "branch_count": len(branch_ids),
@@ -162,7 +181,19 @@ def scan_static_risks(path: Path) -> dict[str, Any]:
     }
 
 
-def run_branch(python_exe: str, prototype: Path, branch_id: str, branch_dir: Path, logs_dir: Path) -> None:
+def run_branch(
+    python_exe: str,
+    prototype: Path,
+    branch_id: str,
+    branch_dir: Path,
+    logs_dir: Path,
+    *,
+    turnouts: Path | None = None,
+    mainline: Path | None = None,
+    tile_index: Path | None = None,
+    probabilities_dir: Path | None = None,
+    dom: Path | None = None,
+) -> None:
     branch_dir.mkdir(parents=True, exist_ok=True)
     command = [
         python_exe,
@@ -172,6 +203,15 @@ def run_branch(python_exe: str, prototype: Path, branch_id: str, branch_dir: Pat
         "--out-dir",
         str(branch_dir),
     ]
+    for flag, value in (
+        ("--turnouts", turnouts),
+        ("--mainline", mainline),
+        ("--tile-index", tile_index),
+        ("--probabilities-dir", probabilities_dir),
+        ("--dom", dom),
+    ):
+        if value is not None:
+            command.extend([flag, str(value)])
     result = subprocess.run(command, check=False, text=True, capture_output=True)
     (logs_dir / f"{branch_id}.stdout.txt").write_text(result.stdout, encoding="utf-8")
     (logs_dir / f"{branch_id}.stderr.txt").write_text(result.stderr, encoding="utf-8")
