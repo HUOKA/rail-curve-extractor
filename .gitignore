@@ -6,6 +6,7 @@
 .pytest_cache/
 .vscode/
 local_archive/
+paper/
 __pycache__/
 *.pyc
 *.pyo
@@ -44,3 +45,6 @@ desktop/dist-electron/
 *.spec.bak
 # Local snapshot of the previous Fluent UI renderer; the real history is in git.
 desktop/src/renderer.legacy/
+
+# Per-user IDE preferences (Kiro / VS Code) — keep them local.
+.vscode/
