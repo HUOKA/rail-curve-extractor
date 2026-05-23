@@ -112,6 +112,32 @@ def test_turnout_endpoint_uses_intersecting_track_z():
     assert np.allclose(z_lines[0].smooth_z, np.linspace(10.0, 20.0, 21))
 
 
+def test_las_side_pair_fusion_rejects_side_outlier_against_local_context():
+    side_z = np.asarray(
+        [
+            [10.00, 10.02],
+            [10.05, 10.03],
+            [10.10, 10.08],
+            [10.15, 30.00],
+            [10.20, 10.18],
+            [10.25, 10.24],
+            [10.30, 10.28],
+        ],
+        dtype=float,
+    )
+
+    fused, diagnostics = centerline_z.fuse_las_side_pairs(
+        side_z,
+        spacing_m=1.0,
+        side_dz_threshold_m=0.30,
+        side_context_window_m=5.0,
+    )
+
+    assert math.isclose(float(fused[3]), 10.15)
+    assert diagnostics["side_disagreement_count"] == 1
+    assert diagnostics["side_context_selected_count"] == 1
+
+
 def test_write_polylinez_shapefile(tmp_path):
     feature = centerline_z.LineFeature(
         0,

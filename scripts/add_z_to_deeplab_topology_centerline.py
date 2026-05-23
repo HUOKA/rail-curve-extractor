@@ -70,6 +70,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--las-quantile", type=float, default=0.85)
     parser.add_argument("--las-min-points", type=int, default=3)
     parser.add_argument("--las-chunk-size", type=int, default=2_000_000)
+    parser.add_argument("--las-side-dz-threshold-m", type=float, default=0.30)
+    parser.add_argument("--las-side-context-window-m", type=float, default=31.0)
     parser.add_argument("--smooth-window-m", type=float, default=51.0)
     parser.add_argument("--despike-window-m", type=float, default=201.0)
     parser.add_argument("--despike-threshold-m", type=float, default=0.45)
@@ -296,7 +298,10 @@ def las_z_for_lines(
     *,
     quantile: float,
     min_points: int,
-) -> tuple[list[np.ndarray], list[np.ndarray]]:
+    spacing_m: float,
+    side_dz_threshold_m: float,
+    side_context_window_m: float,
+) -> tuple[list[np.ndarray], list[np.ndarray], list[dict[str, Any]]]:
     side_values: list[list[list[float]]] = []
     for dense in dense_lines:
         side_values.append([[math.nan, math.nan] for _ in range(dense.coords.shape[0])])
@@ -308,14 +313,79 @@ def las_z_for_lines(
             continue
         side_values[line_index][sample_index][side_index] = float(np.quantile(np.asarray(query_values, dtype=float), quantile))
     line_z: list[np.ndarray] = []
+    diagnostics_by_line: list[dict[str, Any]] = []
     for line_index, dense in enumerate(dense_lines):
-        z = np.full(dense.coords.shape[0], np.nan, dtype=float)
-        for sample_index, pair in enumerate(side_values[line_index]):
-            valid = [value for value in pair if math.isfinite(value)]
-            if valid:
-                z[sample_index] = float(np.mean(valid))
-        line_z.append(z)
-    return line_z, counts
+        side_z = np.asarray(side_values[line_index], dtype=float)
+        fused, diagnostics = fuse_las_side_pairs(
+            side_z,
+            spacing_m=spacing_m,
+            side_dz_threshold_m=side_dz_threshold_m,
+            side_context_window_m=side_context_window_m,
+        )
+        line_z.append(fused)
+        diagnostics["line_id"] = dense.source.properties.get("line_id", f"line_{line_index}")
+        diagnostics["network_role"] = dense.source.properties.get("network_role", "")
+        diagnostics_by_line.append(diagnostics)
+    return line_z, counts, diagnostics_by_line
+
+
+def fuse_las_side_pairs(
+    side_z: np.ndarray,
+    *,
+    spacing_m: float,
+    side_dz_threshold_m: float,
+    side_context_window_m: float,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    pairs = np.asarray(side_z, dtype=float)
+    if pairs.ndim != 2 or pairs.shape[1] != 2:
+        raise ValueError("side_z must be shaped as [sample_count, 2].")
+    valid = np.isfinite(pairs)
+    valid_count = valid.sum(axis=1)
+    preliminary = np.full(pairs.shape[0], np.nan, dtype=float)
+    for index, count in enumerate(valid_count):
+        if count:
+            preliminary[index] = float(np.mean(pairs[index, valid[index]]))
+    context, _ = interpolate_missing(preliminary)
+    if np.any(np.isfinite(context)):
+        context_window = choose_odd_window(context.size, spacing_m, side_context_window_m, minimum=5)
+        context = rolling_nanmedian(context, context_window)
+    fused = np.full(pairs.shape[0], np.nan, dtype=float)
+    side_dz = np.full(pairs.shape[0], np.nan, dtype=float)
+    disagreement_count = 0
+    context_selected_count = 0
+    for index, count in enumerate(valid_count):
+        if count == 0:
+            continue
+        current = pairs[index]
+        if count == 1:
+            fused[index] = float(current[valid[index]][0])
+            continue
+        dz = abs(float(current[0]) - float(current[1]))
+        side_dz[index] = dz
+        if dz <= side_dz_threshold_m:
+            fused[index] = float(np.mean(current))
+            continue
+        disagreement_count += 1
+        if math.isfinite(float(context[index])):
+            best_side = int(np.argmin(np.abs(current - context[index])))
+            fused[index] = float(current[best_side])
+            context_selected_count += 1
+        else:
+            fused[index] = float(np.median(current))
+    finite_side_dz = side_dz[np.isfinite(side_dz)]
+    diagnostics = {
+        "sample_count": int(pairs.shape[0]),
+        "two_side_sample_count": int(finite_side_dz.size),
+        "single_side_sample_count": int(np.count_nonzero(valid_count == 1)),
+        "missing_sample_count": int(np.count_nonzero(valid_count == 0)),
+        "side_disagreement_count": int(disagreement_count),
+        "side_context_selected_count": int(context_selected_count),
+        "side_disagreement_ratio": float(disagreement_count / max(finite_side_dz.size, 1)),
+        "side_dz_threshold_m": float(side_dz_threshold_m),
+        "side_dz_p95_m": float(np.percentile(finite_side_dz, 95)) if finite_side_dz.size else math.nan,
+        "side_dz_max_m": float(np.max(finite_side_dz)) if finite_side_dz.size else math.nan,
+    }
+    return fused, diagnostics
 
 
 def interpolate_missing(z: np.ndarray, fallback: np.ndarray | None = None) -> tuple[np.ndarray, int]:
@@ -819,6 +889,7 @@ def build_summary(
     dsm_lines: list[np.ndarray],
     las_lines: list[np.ndarray],
     las_counts: list[np.ndarray],
+    las_diagnostics: list[dict[str, Any]],
     z_lines: list[ZLine] | None,
     las_reports: list[dict[str, Any]],
     selected_source: str,
@@ -844,6 +915,8 @@ def build_summary(
             "dsm_roughness": roughness(dsm_lines[line_index]),
             "las_roughness": roughness(las_lines[line_index]),
         }
+        if line_index < len(las_diagnostics):
+            report["las_side_diagnostics"] = las_diagnostics[line_index]
         if z_lines:
             report.update(
                 {
@@ -869,6 +942,8 @@ def build_summary(
         "rail_offset_m": args.rail_offset_m,
         "las_radius_m": args.las_radius_m,
         "las_quantile": args.las_quantile,
+        "las_side_dz_threshold_m": args.las_side_dz_threshold_m,
+        "las_side_context_window_m": args.las_side_context_window_m,
         "despike_window_m": args.despike_window_m,
         "despike_threshold_m": args.despike_threshold_m,
         "selected_source": selected_source,
@@ -882,6 +957,13 @@ def build_summary(
                 "point_count_median": float(np.median(counts_all)),
                 "point_count_p10": float(np.percentile(counts_all, 10)),
                 "point_count_p90": float(np.percentile(counts_all, 90)),
+                "side_disagreement_count": int(sum(int(item.get("side_disagreement_count", 0)) for item in las_diagnostics)),
+                "side_context_selected_count": int(sum(int(item.get("side_context_selected_count", 0)) for item in las_diagnostics)),
+                "side_dz_p95_m": safe_percentile(
+                    [float(item.get("side_dz_p95_m", math.nan)) for item in las_diagnostics],
+                    95,
+                ),
+                "side_dz_max_m": safe_max([float(item.get("side_dz_max_m", math.nan)) for item in las_diagnostics]),
                 **aggregate_roughness(las_lines),
             },
         },
@@ -895,6 +977,16 @@ def build_summary(
         "outputs": {},
     }
     return summary
+
+
+def safe_percentile(values: list[float], percentile: float) -> float:
+    finite = np.asarray([value for value in values if math.isfinite(value)], dtype=float)
+    return float(np.percentile(finite, percentile)) if finite.size else math.nan
+
+
+def safe_max(values: list[float]) -> float:
+    finite = np.asarray([value for value in values if math.isfinite(value)], dtype=float)
+    return float(np.max(finite)) if finite.size else math.nan
 
 
 def main() -> None:
@@ -911,12 +1003,15 @@ def main() -> None:
         chunk_size=args.las_chunk_size,
         target_epsg=args.epsg,
     )
-    las_lines, las_counts = las_z_for_lines(
+    las_lines, las_counts, las_diagnostics = las_z_for_lines(
         dense_lines,
         las_values,
         las_meta,
         quantile=args.las_quantile,
         min_points=args.las_min_points,
+        spacing_m=args.spacing_m,
+        side_dz_threshold_m=args.las_side_dz_threshold_m,
+        side_context_window_m=args.las_side_context_window_m,
     )
     selected_source = choose_source(args, dsm_lines, las_lines)
     z_lines = build_z_lines(
@@ -937,7 +1032,18 @@ def main() -> None:
         endpoint_taper_m=args.endpoint_taper_m,
         bridge_replace_threshold_m=args.bridge_replace_threshold_m,
     )
-    summary = build_summary(args, features, dense_lines, dsm_lines, las_lines, las_counts, z_lines, las_reports, selected_source)
+    summary = build_summary(
+        args,
+        features,
+        dense_lines,
+        dsm_lines,
+        las_lines,
+        las_counts,
+        las_diagnostics,
+        z_lines,
+        las_reports,
+        selected_source,
+    )
     if args.dry_run:
         print(json.dumps(summary["source_comparison"], ensure_ascii=False, indent=2))
         return
