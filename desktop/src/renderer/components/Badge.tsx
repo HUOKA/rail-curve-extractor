@@ -6,6 +6,7 @@ type Tone = "neutral" | "success" | "warn" | "danger" | "info" | "accent";
 type Props = {
   tone?: Tone;
   dot?: boolean;
+  pulse?: boolean;
   className?: string;
   children: React.ReactNode;
 };
@@ -28,17 +29,27 @@ const dotClass: Record<Tone, string> = {
   accent: "bg-[var(--color-on-accent)]"
 };
 
-export function Badge({ tone = "neutral", dot, className, children }: Props) {
+export function Badge({ tone = "neutral", dot, pulse, className, children }: Props) {
   return (
     <span
       className={clsx(
         "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5",
-        "text-[11px] font-medium leading-none whitespace-nowrap",
+        "text-[11px] font-medium leading-none whitespace-nowrap font-mono",
         toneClass[tone],
         className
       )}
     >
-      {dot ? <span className={clsx("inline-block w-1.5 h-1.5 rounded-full", dotClass[tone])} aria-hidden /> : null}
+      {dot ? (
+        <span className="relative flex w-2 h-2 shrink-0">
+          {pulse ? (
+            <span
+              className={clsx("absolute inset-0 rounded-full opacity-70", dotClass[tone])}
+              style={{ animation: "pulse-ring 1.8s cubic-bezier(0.4,0,0.2,1) infinite" }}
+            />
+          ) : null}
+          <span className={clsx("relative inline-flex w-2 h-2 rounded-full", dotClass[tone])} />
+        </span>
+      ) : null}
       {children}
     </span>
   );

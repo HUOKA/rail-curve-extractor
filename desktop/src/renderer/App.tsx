@@ -1,7 +1,32 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { BackendClient, BackendConfig, DomPipelineStatus, HealthResponse, RasterProbe, SystemDevices } from "./lib/api";
-import { lastPathPart, formatPercent, formatDuration, timeStamp, clamp } from "./lib/format";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Activity,
+  Cpu,
+  Folder,
+  FolderOpen,
+  Gauge,
+  HardDrive,
+  Pickaxe,
+  Play,
+  Power,
+  RefreshCw,
+  Search,
+  Server,
+  Square,
+  Trash2,
+  Workflow
+} from "lucide-react";
+import {
+  BackendClient,
+  BackendConfig,
+  DomPipelineStatus,
+  HealthResponse,
+  RasterProbe,
+  SystemDevices
+} from "./lib/api";
+import { lastPathPart, formatPercent, formatDuration, timeStamp } from "./lib/format";
 import { Button } from "./components/Button";
 import { Field, TextInput, inputClass } from "./components/Field";
 import { Card } from "./components/Card";
@@ -10,6 +35,7 @@ import { Toggle } from "./components/Toggle";
 import { ProgressBar } from "./components/ProgressBar";
 import { Stepper, StepItem, StepState } from "./components/Stepper";
 import { ThemeSwitch } from "./components/ThemeSwitch";
+import { AnimatedNumber } from "./components/AnimatedNumber";
 import { useTheme } from "./lib/theme";
 
 type FormState = {
@@ -62,18 +88,15 @@ export function App() {
   const logIdRef = useRef(0);
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
 
-  // DOM CRS auto-detection.
   const [domProbe, setDomProbe] = useState<RasterProbe | null>(null);
   const [domProbeError, setDomProbeError] = useState<string | null>(null);
   const [domProbing, setDomProbing] = useState(false);
-  const [epsgOverride, setEpsgOverride] = useState<string>(""); // only set when user manually overrides
+  const [epsgOverride, setEpsgOverride] = useState<string>("");
 
-  // Local hardware probe (CPU / GPU / PyTorch CUDA build).
   const [devices, setDevices] = useState<SystemDevices | null>(null);
 
   const client = useMemo(() => (backend ? new BackendClient(backend) : null), [backend]);
 
-  // Persist form to localStorage so users don't retype paths every restart.
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
@@ -82,7 +105,6 @@ export function App() {
     }
   }, [form]);
 
-  // Acquire backend config once.
   useEffect(() => {
     void window.railCurve.backendConfig().then((config) => {
       setBackend(config);
@@ -90,13 +112,11 @@ export function App() {
     });
   }, []);
 
-  // Tick "now" for live duration display.
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
 
-  // Health probe every 2s, also serves as backend-up signal.
   useEffect(() => {
     if (!client) return;
     let cancelled = false;
@@ -123,7 +143,6 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client]);
 
-  // Auto-detect CRS from DOM whenever domPath changes (debounced 300ms).
   useEffect(() => {
     if (!client) return;
     const path = form.domPath.trim();
@@ -162,7 +181,6 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, form.domPath]);
 
-  // One-shot system devices probe once backend is up.
   useEffect(() => {
     if (!client || !health?.ok || devices) return;
     let cancelled = false;
@@ -196,7 +214,6 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, health?.ok]);
 
-  // Poll pipeline status while running.
   useEffect(() => {
     if (!client || !pipelineJobId) return;
     let cancelled = false;
@@ -226,7 +243,6 @@ export function App() {
               `阶段：${status.stage_name}${status.stage_description ? ` · ${status.stage_description}` : ""}`
             );
           }
-          // Stop polling once backend is no longer running.
           if (status.running === false) {
             running = false;
           }
@@ -264,15 +280,11 @@ export function App() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }, []);
 
-  const formIsValid = useMemo(() => {
-    return (
-      form.domPath.trim().length > 0 &&
-      form.modelPath.trim().length > 0 &&
-      form.outputDir.trim().length > 0
-    );
-  }, [form]);
+  const formIsValid =
+    form.domPath.trim().length > 0 &&
+    form.modelPath.trim().length > 0 &&
+    form.outputDir.trim().length > 0;
 
-  // Resolve which EPSG to actually send: file's own CRS first, then user override.
   const effectiveEpsg: number | null = useMemo(() => {
     const overrideNum = parseInt(epsgOverride, 10);
     if (Number.isFinite(overrideNum) && overrideNum > 0) return overrideNum;
@@ -280,7 +292,6 @@ export function App() {
     return null;
   }, [domProbe, epsgOverride]);
 
-  // EPSG-related run blockers: if DOM has no CRS and user hasn't overridden, can't start.
   const epsgReady =
     !form.domPath.trim() ||
     domProbing ||
@@ -339,7 +350,6 @@ export function App() {
     }
   }
 
-  // File pickers
   async function pickDom() {
     const path = await window.railCurve.openDomDialog();
     if (path) updateForm("domPath", path);
@@ -362,13 +372,14 @@ export function App() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-canvas)]">
+    <div className="flex flex-col h-full bg-[var(--color-canvas)] relative">
       <TopBar
         backend={backend}
         health={health}
         pipelineRunning={pipelineRunning}
         themeMode={themeMode}
         onThemeChange={setThemeMode}
+        devices={devices}
       />
 
       <div className="flex flex-1 min-h-0">
@@ -395,20 +406,44 @@ export function App() {
           }}
         />
 
-        <main className="flex-1 min-w-0 flex flex-col gap-4 p-4 overflow-auto">
-          <PipelineMonitor
-            status={pipelineStatus}
-            startedAt={pipelineStartTs}
-            now={now}
-          />
+        <motion.main
+          className="flex-1 min-w-0 flex flex-col gap-4 p-4 overflow-auto"
+          initial="hidden"
+          animate="show"
+          variants={{
+            hidden: {},
+            show: { transition: { staggerChildren: 0.06, delayChildren: 0.05 } }
+          }}
+        >
+          <FadeIn>
+            <PipelineMonitor status={pipelineStatus} startedAt={pipelineStartTs} now={now} />
+          </FadeIn>
 
           <div className="grid grid-cols-1 xl:grid-cols-[3fr_2fr] gap-4 flex-1 min-h-0">
-            <LogPanel logs={logs} onClear={() => setLogs([])} />
-            <OutputsPanel status={pipelineStatus} />
+            <FadeIn className="min-h-0">
+              <LogPanel logs={logs} onClear={() => setLogs([])} />
+            </FadeIn>
+            <FadeIn className="min-h-0">
+              <OutputsPanel status={pipelineStatus} />
+            </FadeIn>
           </div>
-        </main>
+        </motion.main>
       </div>
     </div>
+  );
+}
+
+function FadeIn({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <motion.div
+      className={className}
+      variants={{
+        hidden: { opacity: 0, y: 8 },
+        show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } }
+      }}
+    >
+      {children}
+    </motion.div>
   );
 }
 
@@ -419,52 +454,99 @@ function TopBar({
   health,
   pipelineRunning,
   themeMode,
-  onThemeChange
+  onThemeChange,
+  devices
 }: {
   backend: BackendConfig | null;
   health: HealthResponse | null;
   pipelineRunning: boolean;
   themeMode: "system" | "light" | "dark";
   onThemeChange: (next: "system" | "light" | "dark") => void;
+  devices: SystemDevices | null;
 }) {
   return (
-    <header className="flex items-center justify-between gap-4 h-14 px-4 border-b border-[var(--color-border)] bg-[var(--color-surface)]">
+    <header className="relative flex items-center justify-between gap-4 h-14 px-4 border-b border-[var(--color-border)] bg-[var(--color-surface)] z-10">
       <div className="flex items-center gap-3 min-w-0">
         <Logo />
         <div className="flex flex-col min-w-0">
-          <span className="text-sm font-semibold tracking-tight">Rail Curve Extractor</span>
-          <span className="text-[11px] text-[var(--color-text-dim)] truncate">
-            DOM → 语义分割 → 后处理 → 3D 中心线
+          <span className="text-[13px] font-semibold tracking-tight uppercase">
+            Rail Curve Extractor
+          </span>
+          <span className="text-[10px] text-[var(--color-text-dim)] truncate font-mono uppercase tracking-wider">
+            DOM → SEMSEG → POST → 3D CENTERLINE
           </span>
         </div>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
-        {pipelineRunning ? (
-          <Badge tone="info" dot>
-            流水线运行中
-          </Badge>
-        ) : null}
-        <Badge tone={health?.ok ? "success" : "warn"} dot>
-          {health?.ok ? `后端在线 · Python ${health.python}` : "等待后端"}
+      <div className="flex items-center gap-3 shrink-0">
+        {devices ? <HardwarePill devices={devices} /> : null}
+
+        <AnimatePresence>
+          {pipelineRunning ? (
+            <motion.div
+              initial={{ opacity: 0, x: 8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 8 }}
+            >
+              <Badge tone="info" dot pulse>
+                PIPELINE RUNNING
+              </Badge>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
+        <Badge tone={health?.ok ? "success" : "warn"} dot pulse={!!health?.ok}>
+          {health?.ok ? `BACKEND · PY ${health.python}` : "WAITING"}
         </Badge>
-        <span className="text-[11px] font-mono text-[var(--color-text-dim)]">
+
+        <span className="text-[10px] font-mono text-[var(--color-text-dim)] tabular-nums">
           {backend?.baseUrl ?? "—"}
         </span>
-        <div className="w-px h-5 bg-[var(--color-border)] mx-1" />
+
+        <div className="w-px h-5 bg-[var(--color-border)]" />
+
         <ThemeSwitch mode={themeMode} onChange={onThemeChange} />
       </div>
     </header>
   );
 }
 
+function HardwarePill({ devices }: { devices: SystemDevices }) {
+  const gpu = devices.cuda.gpus[0];
+  const cudaUsable = devices.cuda.available && devices.torch.cuda_runtime_available;
+  return (
+    <div className="hidden md:flex items-center gap-3 px-3 h-7 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)]">
+      <div className="flex items-center gap-1.5 text-[10px] font-mono">
+        <Cpu size={11} className="text-[var(--color-text-muted)]" />
+        <span className="text-[var(--color-text-muted)]">
+          {devices.cpu.logical_cores ?? "?"}T
+        </span>
+      </div>
+      <div className="w-px h-3 bg-[var(--color-border)]" />
+      <div className="flex items-center gap-1.5 text-[10px] font-mono">
+        <HardDrive size={11} className={cudaUsable ? "text-[var(--color-accent)]" : "text-[var(--color-text-dim)]"} />
+        <span className={cudaUsable ? "text-[var(--color-accent)]" : "text-[var(--color-text-dim)]"}>
+          {gpu?.memory_total_mib ? `${(gpu.memory_total_mib / 1024).toFixed(0)}GB` : "—"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function Logo() {
   return (
-    <div className="flex items-center justify-center w-8 h-8 rounded-md bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <div className="relative flex items-center justify-center w-8 h-8 rounded-md bg-[var(--color-accent-soft)] text-[var(--color-accent)] border border-[var(--color-accent)]/30">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
         <path d="M5 21 12 3l7 18" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M8.5 13h7" strokeLinecap="round" />
       </svg>
+      <div
+        className="absolute inset-0 rounded-md"
+        style={{
+          boxShadow: "0 0 14px var(--color-scan-glow)",
+          opacity: 0.35
+        }}
+      />
     </div>
   );
 }
@@ -511,89 +593,106 @@ function SidePanel({
   pickers
 }: SidePanelProps) {
   const inputsDisabled = pipelineRunning;
+
   return (
-    <aside className="w-[380px] shrink-0 border-r border-[var(--color-border)] bg-[var(--color-surface)] flex flex-col">
-      <div className="flex-1 min-h-0 overflow-auto p-4 flex flex-col gap-4">
-        <div>
-          <h2 className="text-sm font-semibold tracking-tight">输入</h2>
-          <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
-            必填三项：DOM、权重、输出目录。其它可缺省。
-          </p>
-        </div>
+    <aside className="w-[400px] shrink-0 border-r border-[var(--color-border)] bg-[var(--color-surface)] flex flex-col relative">
+      <motion.div
+        className="flex-1 min-h-0 overflow-auto p-4 flex flex-col gap-4"
+        initial="hidden"
+        animate="show"
+        variants={{
+          hidden: {},
+          show: { transition: { staggerChildren: 0.04, delayChildren: 0.08 } }
+        }}
+      >
+        <FadeIn>
+          <SectionHeader icon={<Folder size={13} />} title="数据源" sub="必填三项 · 其余可选" />
+        </FadeIn>
 
-        <PathPicker
-          label="DOM 影像"
-          required
-          value={form.domPath}
-          placeholder="dom.tif / dom.jpg"
-          onChange={(value) => updateForm("domPath", value)}
-          onPick={pickers.dom}
-          disabled={inputsDisabled}
-        />
+        <FadeIn>
+          <PathPicker
+            label="DOM 影像"
+            required
+            value={form.domPath}
+            placeholder="dom.tif / dom.jpg"
+            onChange={(value) => updateForm("domPath", value)}
+            onPick={pickers.dom}
+            disabled={inputsDisabled}
+          />
+        </FadeIn>
 
-        <CrsStatus
-          domPath={form.domPath}
-          probe={domProbe}
-          probing={domProbing}
-          error={domProbeError}
-          epsgOverride={epsgOverride}
-          setEpsgOverride={setEpsgOverride}
-          disabled={inputsDisabled}
-        />
+        <FadeIn>
+          <CrsStatus
+            domPath={form.domPath}
+            probe={domProbe}
+            probing={domProbing}
+            error={domProbeError}
+            epsgOverride={epsgOverride}
+            setEpsgOverride={setEpsgOverride}
+            disabled={inputsDisabled}
+          />
+        </FadeIn>
 
-        <PathPicker
-          label="DeepLab 权重"
-          required
-          value={form.modelPath}
-          placeholder="rail_semantic_deeplab_resnet50.pt"
-          onChange={(value) => updateForm("modelPath", value)}
-          onPick={pickers.model}
-          disabled={inputsDisabled}
-        />
+        <FadeIn>
+          <PathPicker
+            label="DeepLab 权重"
+            required
+            value={form.modelPath}
+            placeholder="rail_semantic_deeplab_resnet50.pt"
+            onChange={(value) => updateForm("modelPath", value)}
+            onPick={pickers.model}
+            disabled={inputsDisabled}
+          />
+        </FadeIn>
 
-        <PathPicker
-          label="输出目录"
-          required
-          value={form.outputDir}
-          placeholder="例：D:\output\dom_centerline_v1"
-          onChange={(value) => updateForm("outputDir", value)}
-          onPick={pickers.output}
-          disabled={inputsDisabled}
-        />
+        <FadeIn>
+          <PathPicker
+            label="输出目录"
+            required
+            value={form.outputDir}
+            placeholder="例：D:\output\dom_centerline_v1"
+            onChange={(value) => updateForm("outputDir", value)}
+            onPick={pickers.output}
+            disabled={inputsDisabled}
+          />
+        </FadeIn>
 
-        <div className="h-px bg-[var(--color-border)] my-1" />
+        <FadeIn>
+          <SectionHeader
+            icon={<HardDrive size={13} />}
+            title="3D 高程"
+            sub="可选 · 缺省只产 2D 中心线"
+          />
+        </FadeIn>
 
-        <div>
-          <h3 className="text-xs font-semibold tracking-tight text-[var(--color-text-muted)]">3D 高程（可选）</h3>
-          <p className="text-[11px] text-[var(--color-text-dim)] mt-0.5">缺省时只产 2D 中心线。</p>
-        </div>
+        <FadeIn>
+          <PathPicker
+            label="DSM 栅格"
+            value={form.dsmPath}
+            placeholder="dsm.tif"
+            onChange={(value) => updateForm("dsmPath", value)}
+            onPick={pickers.dsm}
+            disabled={inputsDisabled}
+          />
+        </FadeIn>
 
-        <PathPicker
-          label="DSM 栅格"
-          value={form.dsmPath}
-          placeholder="dsm.tif（可空）"
-          onChange={(value) => updateForm("dsmPath", value)}
-          onPick={pickers.dsm}
-          disabled={inputsDisabled}
-        />
+        <FadeIn>
+          <PathPicker
+            label="LAS / LAZ 目录"
+            value={form.lasDir}
+            placeholder="点云目录"
+            onChange={(value) => updateForm("lasDir", value)}
+            onPick={pickers.lasDir}
+            disabled={inputsDisabled}
+          />
+        </FadeIn>
 
-        <PathPicker
-          label="LAS / LAZ 目录"
-          value={form.lasDir}
-          placeholder="点云目录（可空）"
-          onChange={(value) => updateForm("lasDir", value)}
-          onPick={pickers.lasDir}
-          disabled={inputsDisabled}
-        />
+        <FadeIn>
+          <SectionHeader icon={<Gauge size={13} />} title="运行参数" />
+        </FadeIn>
 
-        <div className="h-px bg-[var(--color-border)] my-1" />
-
-        <div>
-          <h3 className="text-xs font-semibold tracking-tight text-[var(--color-text-muted)]">运行参数</h3>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="推理设备" className="col-span-2">
+        <FadeIn>
+          <Field label="推理设备">
             <DevicePicker
               devices={devices}
               value={form.device}
@@ -601,59 +700,90 @@ function SidePanel({
               disabled={inputsDisabled}
             />
           </Field>
+        </FadeIn>
 
-          <Field label="分割阈值" hint="0–1">
-            <TextInput
-              type="number"
-              min={0}
-              max={1}
-              step={0.01}
-              value={form.threshold}
-              onChange={(event) => updateForm("threshold", event.currentTarget.value)}
-              disabled={inputsDisabled}
-              mono
-            />
-          </Field>
+        <FadeIn>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="分割阈值" hint="0–1">
+              <TextInput
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={form.threshold}
+                onChange={(event) => updateForm("threshold", event.currentTarget.value)}
+                disabled={inputsDisabled}
+                mono
+              />
+            </Field>
 
-          <Field label="最大瓦片" hint="0 = 不限制">
-            <TextInput
-              type="number"
-              min={0}
-              value={form.maxTiles}
-              onChange={(event) => updateForm("maxTiles", event.currentTarget.value)}
-              disabled={inputsDisabled}
-              mono
-            />
-          </Field>
-        </div>
+            <Field label="最大瓦片" hint="0 = 不限制">
+              <TextInput
+                type="number"
+                min={0}
+                value={form.maxTiles}
+                onChange={(event) => updateForm("maxTiles", event.currentTarget.value)}
+                disabled={inputsDisabled}
+                mono
+              />
+            </Field>
+          </div>
+        </FadeIn>
 
-        <Toggle
-          checked={form.force}
-          onChange={(value) => updateForm("force", value)}
-          label="强制重跑"
-          hint="忽略已有阶段产物，全部重新计算"
-          disabled={inputsDisabled}
-        />
-      </div>
+        <FadeIn>
+          <Toggle
+            checked={form.force}
+            onChange={(value) => updateForm("force", value)}
+            label="强制重跑"
+            hint="忽略已有阶段产物，全部重新计算"
+            disabled={inputsDisabled}
+          />
+        </FadeIn>
+      </motion.div>
 
-      <div className="border-t border-[var(--color-border)] p-3 flex gap-2">
+      <div className="border-t border-[var(--color-border)] p-3 bg-[var(--color-surface)]">
         {pipelineRunning ? (
-          <Button variant="danger" className="flex-1" onClick={onStop} loading={busy}>
+          <Button variant="danger" className="w-full h-10" onClick={onStop} loading={busy} icon={<Square size={14} fill="currentColor" />}>
             停止流水线
           </Button>
         ) : (
           <Button
             variant="primary"
-            className="flex-1"
+            className="w-full h-10"
             disabled={!canStart}
             loading={busy}
             onClick={onStart}
+            icon={<Play size={14} fill="currentColor" />}
           >
             {busy ? "提交中" : "开始流水线"}
           </Button>
         )}
       </div>
     </aside>
+  );
+}
+
+function SectionHeader({
+  icon,
+  title,
+  sub
+}: {
+  icon: React.ReactNode;
+  title: string;
+  sub?: string;
+}) {
+  return (
+    <div className="flex items-baseline gap-2 -mb-1">
+      <span className="text-[var(--color-accent)]">{icon}</span>
+      <h3 className="text-[12px] font-semibold tracking-[0.08em] text-[var(--color-text)] uppercase">
+        {title}
+      </h3>
+      {sub ? (
+        <span className="text-[10px] text-[var(--color-text-dim)] uppercase tracking-wider ml-auto">
+          {sub}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -685,13 +815,21 @@ function PathPicker({
           mono
           className="flex-1"
         />
-        <Button onClick={() => void onPick()} disabled={disabled} variant="secondary" size="md">
+        <Button
+          onClick={() => void onPick()}
+          disabled={disabled}
+          variant="secondary"
+          size="md"
+          icon={<FolderOpen size={13} />}
+        >
           选择
         </Button>
       </div>
     </Field>
   );
 }
+
+/* ------------------------------- Device picker ------------------------------ */
 
 function DevicePicker({
   devices,
@@ -704,22 +842,21 @@ function DevicePicker({
   onChange: (value: FormState["device"]) => void;
   disabled?: boolean;
 }) {
-  // Resolve concrete labels.
   const cudaUsable = !!devices?.cuda.available && !!devices?.torch.cuda_runtime_available;
   const gpuName =
-    devices?.cuda.gpus[0]?.name ?? (devices?.cuda.available ? "GPU 已检测到" : "未检测到 NVIDIA GPU");
+    devices?.cuda.gpus[0]?.name ?? (devices?.cuda.available ? "GPU" : "未检测到 NVIDIA GPU");
   const gpuMemoryGb = devices?.cuda.gpus[0]?.memory_total_mib
     ? `${(devices.cuda.gpus[0].memory_total_mib / 1024).toFixed(0)} GB`
     : null;
+  const gpuDriver = devices?.cuda.gpus[0]?.driver_version;
   const cpuName = devices?.cpu.name ?? "CPU";
   const cpuCores =
     devices?.cpu.physical_cores && devices?.cpu.logical_cores
-      ? `${devices.cpu.physical_cores} 核 / ${devices.cpu.logical_cores} 线程`
+      ? `${devices.cpu.physical_cores}C / ${devices.cpu.logical_cores}T`
       : devices?.cpu.logical_cores
-        ? `${devices.cpu.logical_cores} 线程`
+        ? `${devices.cpu.logical_cores}T`
         : null;
 
-  // Auto-correct invalid selection: if user has cuda saved but cuda is unusable, switch to cpu.
   useEffect(() => {
     if (devices && value === "cuda" && !cudaUsable) {
       onChange("cpu");
@@ -733,19 +870,22 @@ function DevicePicker({
         <DeviceCard
           active={value === "cuda"}
           disabled={disabled || !cudaUsable}
-          icon={<GpuIcon />}
-          title="CUDA"
-          subtitle={gpuName}
-          meta={gpuMemoryGb ?? (devices ? "—" : "检测中…")}
+          icon={<HardDrive size={14} />}
+          tag="CUDA"
+          name={gpuName}
+          meta={gpuMemoryGb}
+          subMeta={gpuDriver ? `DRV ${gpuDriver}` : null}
+          breathing={cudaUsable && value !== "cuda"}
           onClick={() => cudaUsable && onChange("cuda")}
         />
         <DeviceCard
           active={value === "cpu"}
           disabled={disabled}
-          icon={<CpuIcon />}
-          title="CPU"
-          subtitle={cpuName}
-          meta={cpuCores ?? (devices ? "—" : "检测中…")}
+          icon={<Cpu size={14} />}
+          tag="CPU"
+          name={cpuName}
+          meta={cpuCores}
+          subMeta={devices?.cpu.arch ?? null}
           onClick={() => onChange("cpu")}
         />
       </div>
@@ -759,17 +899,21 @@ function DeviceCard({
   active,
   disabled,
   icon,
-  title,
-  subtitle,
+  tag,
+  name,
   meta,
+  subMeta,
+  breathing,
   onClick
 }: {
   active: boolean;
   disabled?: boolean;
   icon: React.ReactNode;
-  title: string;
-  subtitle: string;
-  meta: string;
+  tag: string;
+  name: string;
+  meta: string | null;
+  subMeta: string | null;
+  breathing?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -778,17 +922,39 @@ function DeviceCard({
       onClick={onClick}
       disabled={disabled}
       className={clsx(
-        "flex flex-col gap-1.5 p-3 rounded-md border text-left transition-colors min-w-0",
+        "group relative flex flex-col gap-1.5 p-3 pl-4 rounded-md border text-left transition-colors min-w-0 overflow-hidden",
         active
           ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)]"
-          : "border-[var(--color-border)] bg-[var(--color-surface-2)] hover:border-[var(--color-border-strong)]",
-        disabled && "opacity-45 cursor-not-allowed hover:border-[var(--color-border)]"
+          : "border-[var(--color-border)] bg-[var(--color-surface-2)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-3)]",
+        disabled && "opacity-45 cursor-not-allowed hover:border-[var(--color-border)] hover:bg-[var(--color-surface-2)]"
       )}
     >
+      {/* Accent bar slides in on selection */}
+      <AnimatePresence>
+        {active ? (
+          <motion.span
+            layoutId="device-accent"
+            className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r bg-[var(--color-accent-strong)]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ type: "spring", stiffness: 320, damping: 30 }}
+          />
+        ) : null}
+      </AnimatePresence>
+
+      {/* Idle breathing aura on usable-but-unselected GPU */}
+      {breathing && !disabled ? (
+        <span
+          className="pointer-events-none absolute -top-4 -right-4 w-16 h-16 rounded-full bg-[var(--color-accent)]/20 blur-xl"
+          style={{ animation: "breathe 3s ease-in-out infinite" }}
+        />
+      ) : null}
+
       <div className="flex items-center gap-2">
         <span
           className={clsx(
-            "shrink-0",
+            "shrink-0 transition-colors",
             active ? "text-[var(--color-accent)]" : "text-[var(--color-text-muted)]"
           )}
         >
@@ -796,24 +962,26 @@ function DeviceCard({
         </span>
         <span
           className={clsx(
-            "text-xs font-semibold tracking-tight",
+            "text-[11px] font-mono font-bold tracking-wider uppercase",
             active ? "text-[var(--color-accent)]" : "text-[var(--color-text)]"
           )}
         >
-          {title}
+          {tag}
         </span>
       </div>
-      <div className="text-[11px] text-[var(--color-text-muted)] truncate" title={subtitle}>
-        {subtitle}
+      <div className="text-[12px] text-[var(--color-text)] leading-tight truncate" title={name}>
+        {name}
       </div>
-      <div className="text-[10px] text-[var(--color-text-dim)] font-mono">{meta}</div>
+      <div className="flex items-center justify-between gap-2 text-[10px] font-mono">
+        <span className="text-[var(--color-text-muted)]">{meta ?? "—"}</span>
+        {subMeta ? <span className="text-[var(--color-text-dim)]">{subMeta}</span> : null}
+      </div>
     </button>
   );
 }
 
 function DeviceAdvice({ devices }: { devices: SystemDevices | null }) {
   if (!devices) return null;
-
   const { cuda, torch } = devices;
 
   if (!torch.installed) {
@@ -827,34 +995,31 @@ function DeviceAdvice({ devices }: { devices: SystemDevices | null }) {
       </Hint>
     );
   }
-
   if (cuda.available && !torch.cuda_runtime_available) {
     return (
       <Hint tone="warn">
         检测到 NVIDIA GPU，但当前 PyTorch（{torch.version}）是 CPU 版本。
         <span className="block mt-0.5 text-[var(--color-text-dim)]">
-          安装 GPU 版后才能用 CUDA 推理：从 pytorch.org 选 CUDA {cuda.gpus[0]?.driver_version ? "对应版本" : "12.x"} 的轮子。
+          安装 GPU 版后才能用 CUDA 推理：从 pytorch.org 选 CUDA 12.x 的轮子。
         </span>
       </Hint>
     );
   }
-
   if (!cuda.available) {
-    // No NVIDIA driver / device. Make it explicit AMD/Intel users land on CPU.
     return (
       <Hint tone="info">
         未检测到 NVIDIA 显卡（或驱动未装），将使用 CPU 推理。
         <span className="block mt-0.5 text-[var(--color-text-dim)]">
-          目前 PyTorch CUDA 仅支持 NVIDIA。AMD/Intel 显卡在 Windows 上无法直接加速；如需 GPU 加速，建议换 NVIDIA 卡或在 Linux 上配置 ROCm。
+          PyTorch CUDA 仅支持 NVIDIA。AMD/Intel 显卡在 Windows 上无法直接加速；如需 GPU 加速建议换 NVIDIA 卡或在 Linux 上配置 ROCm。
         </span>
       </Hint>
     );
   }
-
-  // CUDA usable: low-key confirmation only.
   return (
     <Hint tone="success">
-      已检测到 GPU 推理环境：CUDA {torch.cuda_build} · PyTorch {torch.version}
+      <span className="font-mono text-[10px]">
+        CUDA {torch.cuda_build} · TORCH {torch.version}
+      </span>
     </Hint>
   );
 }
@@ -879,46 +1044,7 @@ function Hint({
   );
 }
 
-function GpuIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <rect x="2" y="6" width="20" height="12" rx="2" />
-      <circle cx="9" cy="12" r="2.5" />
-      <circle cx="16" cy="12" r="1.5" />
-      <path d="M2 10h2M2 14h2" />
-    </svg>
-  );
-}
-
-function CpuIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <rect x="6" y="6" width="12" height="12" rx="1.5" />
-      <rect x="9" y="9" width="6" height="6" rx="0.5" />
-      <path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3" />
-    </svg>
-  );
-}
+/* ----------------------------------- CRS ----------------------------------- */
 
 function CrsStatus({
   domPath,
@@ -941,15 +1067,15 @@ function CrsStatus({
 
   let body: React.ReactNode;
   let tone: "info" | "success" | "warn" | "danger" = "info";
-  let label = "坐标系";
+  let label = "CRS";
 
   if (probing) {
     tone = "info";
-    label = "读取中";
+    label = "PROBING";
     body = <span className="text-[var(--color-text-muted)]">正在读取 DOM 自带坐标系…</span>;
   } else if (error) {
     tone = "danger";
-    label = "读取失败";
+    label = "FAILED";
     body = (
       <span className="text-[var(--color-danger)] font-mono text-[11px] break-all">{error}</span>
     );
@@ -957,25 +1083,25 @@ function CrsStatus({
     tone = "success";
     label = `EPSG:${probe.epsg}`;
     body = (
-      <span className="text-[var(--color-text-muted)] truncate" title={probe.crs ?? ""}>
+      <span className="text-[var(--color-text-muted)] truncate font-mono" title={probe.crs ?? ""}>
         {probe.crs ?? "—"}
       </span>
     );
   } else if (probe) {
     tone = "warn";
-    label = "无 CRS";
+    label = "NO CRS";
     body = (
       <div className="flex flex-col gap-1.5">
         <span className="text-[var(--color-text-muted)]">
           这个 DOM 没有写入坐标系信息，需要手动指定。
         </span>
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-[var(--color-text-dim)]">EPSG</span>
+          <span className="text-[10px] font-mono text-[var(--color-text-dim)]">EPSG</span>
           <TextInput
             mono
             value={epsgOverride}
             onChange={(event) => setEpsgOverride(event.currentTarget.value)}
-            placeholder="例如 32651"
+            placeholder="32651"
             disabled={disabled}
             className="h-7 w-28 text-xs"
           />
@@ -987,19 +1113,22 @@ function CrsStatus({
   }
 
   return (
-    <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 flex flex-col gap-1.5">
+    <motion.div
+      layout
+      className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 flex flex-col gap-1.5"
+    >
       <div className="flex items-center justify-between gap-2">
-        <Badge tone={tone} dot>
+        <Badge tone={tone} dot pulse={probing}>
           {label}
         </Badge>
         {probe?.width && probe?.height ? (
-          <span className="text-[10px] font-mono text-[var(--color-text-dim)]">
+          <span className="text-[10px] font-mono text-[var(--color-text-dim)] tabular-nums">
             {probe.width}×{probe.height} · {probe.driver}
           </span>
         ) : null}
       </div>
       <div className="text-[11px] leading-relaxed">{body}</div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -1023,18 +1152,13 @@ function inferStepStates(status: DomPipelineStatus | null): StepItem[] {
 
   if (!status) return steps;
 
-  // Use stage_index/stage_count if backend provides reliable numeric progress.
   const idx = typeof status.stage_index === "number" ? status.stage_index : null;
   const total = typeof status.stage_count === "number" ? status.stage_count : null;
-
-  // Find which blueprint stage matches current stage_name.
   const currentName = status.stage_name ?? "";
   let activeIdx = -1;
   if (currentName) {
     activeIdx = STAGE_BLUEPRINT.findIndex((s) => s.matchers.some((re) => re.test(currentName)));
   }
-
-  // Fallback to numeric mapping when name doesn't match any blueprint.
   if (activeIdx < 0 && idx != null && total && total > 0) {
     activeIdx = Math.min(STAGE_BLUEPRINT.length - 1, Math.floor(((idx - 1) / total) * STAGE_BLUEPRINT.length));
   }
@@ -1042,7 +1166,6 @@ function inferStepStates(status: DomPipelineStatus | null): StepItem[] {
   if (status.state === "completed") {
     return steps.map((step) => ({ ...step, state: "done" }));
   }
-
   if (status.state === "failed") {
     const failAt = Math.max(0, activeIdx);
     return steps.map((step, i) => ({
@@ -1050,7 +1173,6 @@ function inferStepStates(status: DomPipelineStatus | null): StepItem[] {
       state: i < failAt ? "done" : i === failAt ? "failed" : "pending"
     }));
   }
-
   if (status.state === "stopped") {
     const stopAt = Math.max(0, activeIdx);
     return steps.map((step, i) => ({
@@ -1058,7 +1180,6 @@ function inferStepStates(status: DomPipelineStatus | null): StepItem[] {
       state: i < stopAt ? "done" : i === stopAt ? "skipped" : "pending"
     }));
   }
-
   if (activeIdx >= 0) {
     return steps.map((step, i) => ({
       ...step,
@@ -1066,12 +1187,9 @@ function inferStepStates(status: DomPipelineStatus | null): StepItem[] {
       detail: i === activeIdx ? currentName || undefined : undefined
     }));
   }
-
-  // Running but no stage info yet
   if (status.state === "running" || status.state === "starting" || status.state === "planned") {
     return steps.map((step, i) => ({ ...step, state: i === 0 ? "running" : "pending" }));
   }
-
   return steps;
 }
 
@@ -1109,8 +1227,8 @@ function PipelineMonitor({
           : "尚未启动 · 在左侧填写输入后点击开始"
       }
       actions={
-        <Badge tone={tone} dot>
-          {status?.state ?? "idle"}
+        <Badge tone={tone} dot pulse={status?.running}>
+          {(status?.state ?? "idle").toUpperCase()}
         </Badge>
       }
       bodyClassName="flex flex-col gap-4"
@@ -1123,8 +1241,17 @@ function PipelineMonitor({
         tone={status?.state === "failed" ? "danger" : "accent"}
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Stat label="进度" value={formatPercent(status?.percent)} />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <Stat
+          label="进度"
+          value={
+            typeof status?.percent === "number" ? (
+              <AnimatedNumber value={status.percent} fractionDigits={1} suffix="%" />
+            ) : (
+              "—"
+            )
+          }
+        />
         <Stat
           label="阶段"
           value={
@@ -1133,32 +1260,42 @@ function PipelineMonitor({
               : status?.stage_name ?? "—"
           }
         />
-        <Stat label="耗时" value={status ? formatDuration(elapsed) : "—"} />
+        <Stat label="耗时" value={status ? formatDuration(elapsed) : "—"} mono />
         <Stat label="进程" value={status?.pid ? `PID ${status.pid}` : "—"} mono />
       </div>
 
-      {status?.error ? (
-        <div className="rounded-md border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-xs text-[var(--color-danger)] font-mono whitespace-pre-wrap break-all">
-          {status.error}
-        </div>
-      ) : null}
+      <AnimatePresence>
+        {status?.error ? (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className="rounded-md border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-xs text-[var(--color-danger)] font-mono whitespace-pre-wrap break-all"
+          >
+            {status.error}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </Card>
   );
 }
 
 function Stat({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
-    <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 min-w-0">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--color-text-dim)]">{label}</div>
+    <div className="relative rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 min-w-0 overflow-hidden">
+      <div className="text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-dim)] font-mono">
+        {label}
+      </div>
       <div
         className={clsx(
-          "mt-1 text-sm font-semibold truncate",
-          mono ? "font-mono" : "",
-          "text-[var(--color-text)]"
+          "mt-1 text-sm font-semibold truncate text-[var(--color-text)] tabular-nums",
+          mono ? "font-mono" : "font-mono"
         )}
       >
         {value}
       </div>
+      {/* corner tick — industrial feel */}
+      <div className="absolute top-0 right-0 w-2 h-2 border-r border-t border-[var(--color-border)]" />
     </div>
   );
 }
@@ -1173,7 +1310,6 @@ function LogPanel({
   onClear: () => void;
 }) {
   const [query, setQuery] = useState("");
-
   const filtered = useMemo(() => {
     if (!query.trim()) return logs;
     const lower = query.trim().toLowerCase();
@@ -1192,19 +1328,28 @@ function LogPanel({
   return (
     <Card
       title="运行日志"
-      subtitle="最新事件位于顶部 · 仅前端事件流，详细日志见输出目录"
+      subtitle="最新事件位于顶部 · 仅前端事件流"
       actions={
         <>
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.currentTarget.value)}
-            placeholder="过滤"
-            className={clsx(inputClass, "h-7 w-32 text-xs px-2")}
-          />
+          <div className="relative">
+            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--color-text-dim)]" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.currentTarget.value)}
+              placeholder="过滤"
+              className={clsx(inputClass, "h-7 w-32 text-xs pl-7 pr-2 font-mono")}
+            />
+          </div>
           <Button size="sm" variant="ghost" onClick={handleCopy} disabled={filtered.length === 0}>
             复制
           </Button>
-          <Button size="sm" variant="ghost" onClick={onClear} disabled={logs.length === 0}>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onClear}
+            disabled={logs.length === 0}
+            icon={<Trash2 size={12} />}
+          >
             清空
           </Button>
         </>
@@ -1212,22 +1357,33 @@ function LogPanel({
       bodyClassName="p-0"
       className="min-h-0"
     >
-      <div className="h-[320px] overflow-auto font-mono text-xs leading-relaxed">
+      <div className="h-[320px] overflow-auto font-mono text-[11px] leading-relaxed">
         {filtered.length === 0 ? (
           <div className="h-full flex items-center justify-center text-[var(--color-text-dim)] text-xs">
             {logs.length === 0 ? "暂无日志" : "无匹配条目"}
           </div>
         ) : (
-          <ul className="divide-y divide-[var(--color-border)]/60">
-            {filtered.map((entry) => (
-              <li key={entry.id} className="flex gap-3 px-4 py-1.5 hover:bg-[var(--color-surface-2)]">
-                <span className="text-[var(--color-text-dim)] shrink-0">{entry.time}</span>
-                <span className={clsx("shrink-0 w-12 uppercase text-[10px]", logLevelColor(entry.level))}>
-                  {entry.level}
-                </span>
-                <span className="text-[var(--color-text)] break-all">{entry.text}</span>
-              </li>
-            ))}
+          <ul>
+            <AnimatePresence initial={false}>
+              {filtered.map((entry) => (
+                <motion.li
+                  key={entry.id}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                  className="flex gap-3 px-4 py-1 border-b border-[var(--color-border)]/40 last:border-b-0 hover:bg-[var(--color-surface-2)]"
+                >
+                  <span className="text-[var(--color-text-dim)] shrink-0 tabular-nums">
+                    {entry.time}
+                  </span>
+                  <span className={clsx("shrink-0 w-12 text-[10px] uppercase tracking-wider font-bold", logLevelColor(entry.level))}>
+                    {entry.level}
+                  </span>
+                  <span className="text-[var(--color-text)] break-all">{entry.text}</span>
+                </motion.li>
+              ))}
+            </AnimatePresence>
           </ul>
         )}
       </div>
@@ -1278,11 +1434,9 @@ function OutputsPanel({ status }: { status: DomPipelineStatus | null }) {
       subtitle="完成后点击文件名可在资源管理器中定位"
       actions={
         outDir ? (
-          <>
-            <Button size="sm" variant="secondary" onClick={() => void openFolder(outDir)}>
-              打开输出目录
-            </Button>
-          </>
+          <Button size="sm" variant="secondary" onClick={() => void openFolder(outDir)} icon={<FolderOpen size={12} />}>
+            打开输出目录
+          </Button>
         ) : null
       }
       bodyClassName="p-0"
@@ -1294,10 +1448,10 @@ function OutputsPanel({ status }: { status: DomPipelineStatus | null }) {
             流水线完成后会在这里列出 2D / 3D Shapefile、证据图层和 manifest
           </div>
         ) : (
-          <ul className="divide-y divide-[var(--color-border)]/60">
+          <ul>
             {outDir ? (
               <OutputRow
-                kind="目录"
+                kind="DIR"
                 label="out_dir"
                 path={outDir}
                 onReveal={() => void openFolder(outDir)}
@@ -1305,7 +1459,7 @@ function OutputsPanel({ status }: { status: DomPipelineStatus | null }) {
               />
             ) : null}
             {entries.length === 0 ? (
-              <li className="px-4 py-3 text-xs text-[var(--color-text-dim)]">
+              <li className="px-4 py-3 text-xs text-[var(--color-text-dim)] font-mono">
                 {status.state === "running" || status.state === "starting"
                   ? "运行中，等待阶段输出…"
                   : "暂无具名产出文件"}
@@ -1314,7 +1468,7 @@ function OutputsPanel({ status }: { status: DomPipelineStatus | null }) {
               entries.map((entry) => (
                 <OutputRow
                   key={entry.key}
-                  kind="文件"
+                  kind="FILE"
                   label={entry.key}
                   path={entry.value}
                   onReveal={() => void reveal(entry.value)}
@@ -1324,7 +1478,7 @@ function OutputsPanel({ status }: { status: DomPipelineStatus | null }) {
             )}
             {summaryPath ? (
               <OutputRow
-                kind="摘要"
+                kind="JSON"
                 label="summary"
                 path={summaryPath}
                 onReveal={() => void reveal(summaryPath)}
@@ -1333,7 +1487,7 @@ function OutputsPanel({ status }: { status: DomPipelineStatus | null }) {
             ) : null}
             {logPath ? (
               <OutputRow
-                kind="日志"
+                kind="LOG"
                 label="pipeline.log"
                 path={logPath}
                 onReveal={() => void reveal(logPath)}
@@ -1361,13 +1515,13 @@ function OutputRow({
   onCopy: () => void;
 }) {
   return (
-    <li className="group flex items-center gap-3 px-4 py-2 hover:bg-[var(--color-surface-2)]">
-      <Badge tone="neutral" className="shrink-0">
+    <li className="group flex items-center gap-3 px-4 py-2 border-b border-[var(--color-border)]/40 last:border-b-0 hover:bg-[var(--color-surface-2)] transition-colors">
+      <span className="shrink-0 inline-flex items-center justify-center min-w-[42px] h-5 px-1.5 rounded text-[9px] font-mono font-bold tracking-wider bg-[var(--color-surface-3)] text-[var(--color-text-muted)] border border-[var(--color-border)]">
         {kind}
-      </Badge>
+      </span>
       <div className="min-w-0 flex-1">
         <div className="text-xs font-medium text-[var(--color-text)] truncate">{label}</div>
-        <div className="text-[11px] font-mono text-[var(--color-text-dim)] truncate" title={path}>
+        <div className="text-[10px] font-mono text-[var(--color-text-dim)] truncate" title={path}>
           {path}
         </div>
       </div>
@@ -1375,7 +1529,7 @@ function OutputRow({
         <Button size="sm" variant="ghost" onClick={onCopy}>
           复制
         </Button>
-        <Button size="sm" variant="ghost" onClick={onReveal}>
+        <Button size="sm" variant="ghost" onClick={onReveal} icon={<FolderOpen size={11} />}>
           定位
         </Button>
       </div>
@@ -1420,6 +1574,11 @@ function loadFormFromStorage(): FormState {
   }
 }
 
-// suppress unused-import lint when only types are referenced
-void clamp;
 void lastPathPart;
+void formatPercent;
+void Activity;
+void Server;
+void Workflow;
+void Pickaxe;
+void Power;
+void RefreshCw;
