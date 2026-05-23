@@ -71,6 +71,47 @@ def test_topology_gap_bridge_uses_connected_endpoint_z():
     assert np.allclose(z_lines[1].smooth_z, np.linspace(10.0, 10.2, 11))
 
 
+def test_turnout_endpoint_uses_intersecting_track_z():
+    main = centerline_z.LineFeature(0, {"line_id": "MAIN", "network_role": "main_through_track"}, np.asarray([[0.0, 0.0], [20.0, 0.0]]))
+    turnout = centerline_z.LineFeature(1, {"line_id": "TURNOUT", "network_role": "turnout_connector"}, np.asarray([[10.0, 0.0], [10.0, 10.0]]))
+    dense_lines = [centerline_z.densify_line(feature, 1.0) for feature in [main, turnout]]
+    z_lines = [
+        centerline_z.ZLine(
+            dense_lines[0],
+            np.linspace(10.0, 20.0, 21),
+            np.linspace(10.0, 20.0, 21),
+            np.ones(21),
+            np.linspace(10.0, 20.0, 21),
+            np.linspace(10.0, 20.0, 21),
+            "las_rail_pair",
+            0,
+            0,
+        ),
+        centerline_z.ZLine(
+            dense_lines[1],
+            np.full(11, 30.0),
+            np.full(11, 30.0),
+            np.ones(11),
+            np.full(11, 30.0),
+            np.full(11, 30.0),
+            "las_rail_pair",
+            0,
+            0,
+        ),
+    ]
+
+    centerline_z.apply_topology_z_constraints(
+        z_lines,
+        endpoint_tolerance_m=0.25,
+        endpoint_taper_m=5.0,
+        bridge_replace_threshold_m=0.50,
+    )
+
+    assert math.isclose(float(z_lines[1].smooth_z[0]), 15.0)
+    assert z_lines[1].endpoint_constraint_count == 1
+    assert np.allclose(z_lines[0].smooth_z, np.linspace(10.0, 20.0, 21))
+
+
 def test_write_polylinez_shapefile(tmp_path):
     feature = centerline_z.LineFeature(
         0,

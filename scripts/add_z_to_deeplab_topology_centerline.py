@@ -54,6 +54,7 @@ class ZLine:
     fallback_count: int
     outlier_count: int
     bridge_z_mode: str = ""
+    endpoint_constraint_count: int = 0
 
 
 def parse_args() -> argparse.Namespace:
@@ -464,6 +465,72 @@ def endpoint_targets(z_lines: list[ZLine], tolerance_m: float) -> dict[tuple[int
     return targets
 
 
+def project_point_to_z_line(point: np.ndarray, z_line: ZLine) -> tuple[float, float] | None:
+    coords = z_line.dense.coords
+    if coords.shape[0] < 2:
+        return None
+    best_distance = math.inf
+    best_z = math.nan
+    for index in range(1, coords.shape[0]):
+        ax, ay = coords[index - 1]
+        bx, by = coords[index]
+        dx = float(bx - ax)
+        dy = float(by - ay)
+        length2 = dx * dx + dy * dy
+        if length2 <= 1e-12:
+            continue
+        t = max(0.0, min(1.0, ((float(point[0]) - float(ax)) * dx + (float(point[1]) - float(ay)) * dy) / length2))
+        px = float(ax) + dx * t
+        py = float(ay) + dy * t
+        distance = math.hypot(float(point[0]) - px, float(point[1]) - py)
+        if distance < best_distance:
+            za = float(z_line.smooth_z[index - 1])
+            zb = float(z_line.smooth_z[index])
+            best_distance = distance
+            best_z = za + (zb - za) * t
+    if not math.isfinite(best_distance) or not math.isfinite(best_z):
+        return None
+    return best_distance, best_z
+
+
+def endpoint_projection_source_rank(z_line: ZLine) -> tuple[int, str]:
+    props = z_line.dense.source.properties
+    role = str(props.get("network_role", "")).lower()
+    if is_bridge_line(z_line.dense.source):
+        return (4, role)
+    if role == "main_through_track":
+        return (0, role)
+    if role == "parallel_straight_track":
+        return (1, role)
+    if "straight" in role:
+        return (2, role)
+    if role == "turnout_connector":
+        return (3, role)
+    return (3, role)
+
+
+def endpoint_projection_targets(z_lines: list[ZLine], tolerance_m: float) -> dict[tuple[int, str], float]:
+    targets: dict[tuple[int, str], float] = {}
+    for line_index, z_line in enumerate(z_lines):
+        for side, point in (("start", z_line.dense.coords[0]), ("end", z_line.dense.coords[-1])):
+            candidates: list[tuple[tuple[int, str], float, float]] = []
+            for target_index, target_line in enumerate(z_lines):
+                if target_index == line_index:
+                    continue
+                projection = project_point_to_z_line(point, target_line)
+                if projection is None:
+                    continue
+                distance, target_z = projection
+                if distance > tolerance_m:
+                    continue
+                candidates.append((endpoint_projection_source_rank(target_line), distance, target_z))
+            if not candidates:
+                continue
+            candidates.sort(key=lambda item: (item[0], item[1]))
+            targets[(line_index, side)] = candidates[0][2]
+    return targets
+
+
 def apply_endpoint_taper(z: np.ndarray, stations: np.ndarray, start_target: float | None, end_target: float | None, taper_m: float) -> np.ndarray:
     out = z.copy()
     if start_target is not None and math.isfinite(start_target) and out.size:
@@ -481,11 +548,14 @@ def apply_endpoint_taper(z: np.ndarray, stations: np.ndarray, start_target: floa
 
 def apply_topology_z_constraints(z_lines: list[ZLine], *, endpoint_tolerance_m: float, endpoint_taper_m: float, bridge_replace_threshold_m: float) -> None:
     targets = endpoint_targets(z_lines, endpoint_tolerance_m)
+    for key, value in endpoint_projection_targets(z_lines, endpoint_tolerance_m).items():
+        targets.setdefault(key, value)
     for line_index, z_line in enumerate(z_lines):
         start_target = targets.get((line_index, "start"))
         end_target = targets.get((line_index, "end"))
         if start_target is None and end_target is None:
             continue
+        z_line.endpoint_constraint_count += int(start_target is not None) + int(end_target is not None)
         if is_bridge_line(z_line.dense.source) and start_target is not None and end_target is not None:
             interp = np.interp(z_line.dense.stations, [z_line.dense.stations[0], z_line.dense.stations[-1]], [start_target, end_target])
             median_delta = float(np.nanmedian(np.abs(z_line.smooth_z - interp)))
@@ -620,6 +690,7 @@ def make_3d_feature(z_line: ZLine) -> dict[str, Any]:
             "z_fallback_n": int(z_line.fallback_count),
             "z_outlier_n": int(z_line.outlier_count),
             "z_bridge_mode": z_line.bridge_z_mode,
+            "z_endpoint_n": int(z_line.endpoint_constraint_count),
             "z_min": round(stats["z_min"], 3),
             "z_max": round(stats["z_max"], 3),
             "z_med": round(stats["z_med"], 3),
@@ -662,6 +733,7 @@ def write_polylinez_shapefile(path: Path, z_lines: list[ZLine], epsg: int) -> No
     writer.field("z_valid", "F", decimal=4)
     writer.field("z_fb_n", "N", size=8)
     writer.field("z_out_n", "N", size=8)
+    writer.field("z_end_n", "N", size=8)
     writer.field("z_min", "F", decimal=3)
     writer.field("z_max", "F", decimal=3)
     writer.field("z_med", "F", decimal=3)
@@ -687,6 +759,7 @@ def write_polylinez_shapefile(path: Path, z_lines: list[ZLine], epsg: int) -> No
             safe_float(np.isfinite(z_line.raw_z).mean()),
             int(z_line.fallback_count),
             int(z_line.outlier_count),
+            int(z_line.endpoint_constraint_count),
             safe_float(stats["z_min"]),
             safe_float(stats["z_max"]),
             safe_float(stats["z_med"]),
@@ -778,6 +851,7 @@ def build_summary(
                     "z_fallback_count": int(z_lines[line_index].fallback_count),
                     "z_outlier_count": int(z_lines[line_index].outlier_count),
                     "z_bridge_mode": z_lines[line_index].bridge_z_mode,
+                    "z_endpoint_constraint_count": int(z_lines[line_index].endpoint_constraint_count),
                     "z_stats": z_stats(z_lines[line_index].smooth_z),
                     "smooth_roughness": roughness(z_lines[line_index].smooth_z),
                 }
