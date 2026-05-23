@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rail-curve-extractor"
 version = "0.1.0"
-description = "Extract rail points from lidar point clouds and export Isaac Sim compatible USD BasisCurves."
+description = "Automatic rail centerline extraction from UAV orthomosaics, with optional 3D Z lifting from DSM/LAS."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
